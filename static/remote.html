@@ -1,0 +1,3252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="theme-color" content="#070b14" />
+  <title>Tailscale Remote</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #070b14;
+      --panel: #0f172a;
+      --panel-2: #162033;
+      --border: rgba(148, 163, 184, 0.17);
+      --text: #f8fafc;
+      --muted: #94a3b8;
+      --accent: #38bdf8;
+      --emerald: #10b981;
+      --amber: #f59e0b;
+      --rose: #f43f5e;
+      --safe-top: env(safe-area-inset-top, 0px);
+      --safe-bottom: env(safe-area-inset-bottom, 0px);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    html, body {
+      height: 100%;
+      width: 100%;
+      overflow: hidden;
+      background:
+        radial-gradient(circle at 20% 10%, rgba(56, 189, 248, 0.13), transparent 42%),
+        radial-gradient(circle at 80% 90%, rgba(99, 102, 241, 0.15), transparent 44%),
+        var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, sans-serif;
+    }
+
+    body {
+      display: flex;
+      justify-content: center;
+      align-items: stretch;
+    }
+
+    .app {
+      width: 100%;
+      height: 100%;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      background: rgba(7, 11, 20, 0.94);
+      padding-top: var(--safe-top);
+      padding-bottom: var(--safe-bottom);
+    }
+
+    @media (min-width: 640px) {
+      body {
+        padding: 16px;
+        align-items: center;
+      }
+      .app {
+        max-width: 440px;
+        max-height: 860px;
+        border-radius: 30px;
+        border: 1px solid var(--border);
+        box-shadow: 0 30px 90px rgba(0, 0, 0, 0.65);
+        overflow: hidden;
+      }
+    }
+
+    /* Minimal Top Bar */
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 11px 14px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(15, 23, 42, 0.9);
+      flex-shrink: 0;
+    }
+
+    .host-meta {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      min-width: 0;
+    }
+
+    .conn-dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: var(--amber);
+      box-shadow: 0 0 8px var(--amber);
+      flex-shrink: 0;
+    }
+    .conn-dot.ok {
+      background: var(--emerald);
+      box-shadow: 0 0 8px var(--emerald);
+    }
+    .conn-dot.err {
+      background: var(--rose);
+      box-shadow: 0 0 8px var(--rose);
+    }
+
+    .host-title {
+      font-size: 0.95rem;
+      font-weight: 700;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 170px;
+    }
+
+    .rtt-pill {
+      font-size: 0.7rem;
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+      padding: 3px 8px;
+      border-radius: 999px;
+      background: var(--panel-2);
+      border: 1px solid var(--border);
+      color: #7dd3fc;
+      flex-shrink: 0;
+    }
+
+    .top-actions {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      flex-shrink: 0;
+    }
+
+    .icon-btn {
+      appearance: none;
+      border: 1px solid var(--border);
+      background: var(--panel-2);
+      color: var(--text);
+      width: 34px;
+      height: 34px;
+      border-radius: 10px;
+      font-size: 0.96rem;
+      display: grid;
+      place-items: center;
+      cursor: pointer;
+    }
+    .icon-btn:active { transform: scale(0.94); }
+    .icon-btn.on {
+      background: rgba(56, 189, 248, 0.2);
+      border-color: rgba(56, 189, 248, 0.6);
+      color: #7dd3fc;
+    }
+
+    /* Auto-hiding Live Strip */
+    .live-strip {
+      display: none;
+      flex-direction: column;
+      gap: 5px;
+      padding: 7px 14px;
+      background: rgba(15, 23, 42, 0.78);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .live-strip.show {
+      display: flex;
+    }
+    .strip-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      font-size: 0.76rem;
+    }
+    .strip-text {
+      min-width: 0;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      color: #e2e8f0;
+    }
+    .strip-text strong { color: #7dd3fc; }
+    .pill-btn {
+      appearance: none;
+      border: 1px solid var(--border);
+      background: var(--panel-2);
+      color: var(--text);
+      border-radius: 8px;
+      padding: 4px 9px;
+      font-size: 0.73rem;
+      font-weight: 600;
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+    .pill-btn:active { transform: scale(0.95); }
+
+    /* Toast */
+    .toast {
+      position: absolute;
+      bottom: 72px;
+      left: 50%;
+      transform: translateX(-50%) translateY(10px);
+      background: rgba(15, 23, 42, 0.96);
+      border: 1px solid rgba(56, 189, 248, 0.45);
+      color: #e0f2fe;
+      padding: 8px 14px;
+      border-radius: 999px;
+      font-size: 0.78rem;
+      font-weight: 600;
+      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.16s ease, transform 0.16s ease;
+      z-index: 30;
+      max-width: 90%;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+
+    /* Views */
+    .views {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .view {
+      display: none;
+      flex: 1;
+      min-height: 0;
+      flex-direction: column;
+      padding: 12px;
+      gap: 11px;
+      overflow-y: auto;
+      scrollbar-width: thin;
+      scrollbar-color: rgba(148, 163, 184, 0.25) transparent;
+    }
+    .view.active {
+      display: flex;
+    }
+
+    /* Buttons & Cards */
+    .btn {
+      appearance: none;
+      border: 1px solid var(--border);
+      background: var(--panel);
+      color: var(--text);
+      border-radius: 13px;
+      padding: 11px 10px;
+      font-size: 0.84rem;
+      font-weight: 600;
+      cursor: pointer;
+      user-select: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      transition: background 0.1s ease, border-color 0.1s ease, transform 0.08s ease;
+    }
+    .btn:active, .btn.pressed {
+      transform: scale(0.96);
+      background: #1e293b;
+      border-color: rgba(56, 189, 248, 0.55);
+    }
+    .btn.accent {
+      background: rgba(56, 189, 248, 0.14);
+      border-color: rgba(56, 189, 248, 0.42);
+      color: #7dd3fc;
+    }
+    .btn.yt-btn {
+      background: rgba(239, 68, 68, 0.16);
+      border-color: rgba(239, 68, 68, 0.45);
+      color: #fca5a5;
+    }
+    .btn.danger {
+      background: rgba(244, 63, 94, 0.15);
+      border-color: rgba(244, 63, 94, 0.45);
+      color: #fda4af;
+    }
+    .btn.active-toggle {
+      background: rgba(16, 185, 129, 0.2);
+      border-color: rgba(16, 185, 129, 0.6);
+      color: #6ee7b7;
+    }
+    .btn.locked-toggle {
+      background: rgba(245, 158, 11, 0.22);
+      border-color: rgba(245, 158, 11, 0.7);
+      color: #fcd34d;
+    }
+
+    .card {
+      background: rgba(15, 23, 42, 0.86);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      flex-shrink: 0;
+    }
+
+    .section-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .section-label {
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+    }
+
+    /* PAD TAB */
+    .pad-quick {
+      display: grid;
+      grid-template-columns: 1.05fr 0.78fr 0.82fr 1.02fr 0.75fr;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+    .pad-quick .btn {
+      padding: 10px 4px;
+      font-size: 0.78rem;
+      white-space: nowrap;
+    }
+
+    .peek-panel {
+      display: none;
+      flex-direction: column;
+      gap: 7px;
+      background: rgba(15, 23, 42, 0.92);
+      border: 1px solid rgba(56, 189, 248, 0.32);
+      border-radius: 16px;
+      padding: 8px;
+      flex-shrink: 0;
+    }
+    .peek-panel.open { display: flex; }
+    .peek-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+      font-size: 0.74rem;
+    }
+    .peek-actions {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .peek-actions .btn {
+      padding: 4px 8px;
+      font-size: 0.72rem;
+      border-radius: 8px;
+    }
+    .peek-img-wrap {
+      width: 100%;
+      max-height: 175px;
+      border-radius: 11px;
+      overflow: hidden;
+      background: #04070e;
+      border: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 90px;
+    }
+    .peek-img-wrap img {
+      width: 100%;
+      max-height: 175px;
+      object-fit: contain;
+      display: block;
+    }
+    .peek-status {
+      font-size: 0.75rem;
+      color: var(--muted);
+      padding: 12px;
+      text-align: center;
+    }
+
+    .trackpad {
+      flex: 1;
+      min-height: 220px;
+      position: relative;
+      border-radius: 22px;
+      border: 1px solid rgba(56, 189, 248, 0.24);
+      background:
+        radial-gradient(circle at 50% 45%, rgba(56, 189, 248, 0.07), transparent 65%),
+        linear-gradient(180deg, rgba(15, 23, 42, 0.96), rgba(10, 15, 29, 0.98));
+      box-shadow: inset 0 0 36px rgba(0, 0, 0, 0.45);
+      touch-action: none;
+      user-select: none;
+      overscroll-behavior: none;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+    .trackpad-hint {
+      pointer-events: none;
+      text-align: center;
+      color: rgba(148, 163, 184, 0.45);
+      font-size: 0.78rem;
+      line-height: 1.6;
+      padding: 0 18px;
+    }
+    .gesture-badge {
+      position: absolute;
+      top: 12px;
+      left: 50%;
+      transform: translateX(-50%);
+      padding: 5px 12px;
+      border-radius: 999px;
+      background: rgba(15, 23, 42, 0.85);
+      border: 1px solid rgba(56, 189, 248, 0.35);
+      color: #bae6fd;
+      font-size: 0.74rem;
+      font-weight: 600;
+      opacity: 0;
+      transition: opacity 0.16s ease;
+      pointer-events: none;
+    }
+    .gesture-badge.show { opacity: 1; }
+    .touch-glow {
+      position: absolute;
+      width: 56px;
+      height: 56px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(56, 189, 248, 0.45), transparent 70%);
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+      opacity: 0;
+    }
+
+    .mouse-buttons {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 9px;
+      flex-shrink: 0;
+    }
+    .mouse-buttons .btn {
+      padding: 15px 10px;
+      font-size: 0.9rem;
+    }
+
+    .vol-bar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 11px;
+      background: rgba(15, 23, 42, 0.86);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      flex-shrink: 0;
+    }
+    .vol-bar input[type="range"] {
+      flex: 1;
+      accent-color: var(--accent);
+    }
+    .vol-pct {
+      font-size: 0.8rem;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      min-width: 36px;
+      text-align: right;
+      color: #7dd3fc;
+    }
+
+    /* APPS TAB */
+    .win-list {
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+    }
+    .win-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(7, 11, 20, 0.78);
+      border: 1px solid var(--border);
+      border-radius: 13px;
+      padding: 5px;
+    }
+    .win-item.focused {
+      border-color: rgba(56, 189, 248, 0.5);
+      background: rgba(56, 189, 248, 0.08);
+    }
+    .win-focus-btn {
+      flex: 1;
+      min-width: 0;
+      appearance: none;
+      border: none;
+      background: transparent;
+      color: var(--text);
+      text-align: left;
+      padding: 6px 8px;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .win-title {
+      font-size: 0.85rem;
+      font-weight: 700;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .win-sub {
+      font-size: 0.71rem;
+      color: var(--muted);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .win-tag {
+      padding: 1px 6px;
+      border-radius: 999px;
+      font-size: 0.65rem;
+      font-weight: 700;
+      background: rgba(56, 189, 248, 0.16);
+      color: #7dd3fc;
+    }
+    .win-tag.cursor {
+      background: rgba(245, 158, 11, 0.18);
+      color: #fcd34d;
+    }
+    .win-close-btn {
+      appearance: none;
+      border: 1px solid rgba(244, 63, 94, 0.35);
+      background: rgba(244, 63, 94, 0.14);
+      color: #fda4af;
+      width: 34px;
+      height: 34px;
+      border-radius: 10px;
+      font-size: 0.9rem;
+      font-weight: 700;
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+    .win-close-btn:active { transform: scale(0.93); }
+
+    .text-input {
+      width: 100%;
+      background: #070b14;
+      border: 1px solid rgba(56, 189, 248, 0.35);
+      border-radius: 11px;
+      color: var(--text);
+      padding: 10px 12px;
+      font-size: 0.94rem;
+      outline: none;
+    }
+    .text-input:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.15);
+    }
+
+    .launch-pair {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .deck-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 8px;
+    }
+    .tile-wrap {
+      position: relative;
+    }
+    .tile-wrap:last-child:nth-child(odd) {
+      grid-column: 1 / -1;
+    }
+    .tile-btn {
+      width: 100%;
+      justify-content: flex-start;
+      padding: 10px 11px;
+      border-radius: 13px;
+      background: rgba(7, 11, 20, 0.72);
+      gap: 10px;
+    }
+    .tile-icon {
+      width: 30px;
+      height: 30px;
+      border-radius: 9px;
+      display: grid;
+      place-items: center;
+      font-size: 0.92rem;
+      font-weight: 800;
+      color: #ffffff;
+      flex-shrink: 0;
+    }
+    .tile-name {
+      font-size: 0.82rem;
+      font-weight: 700;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .tile-del {
+      display: none;
+      position: absolute;
+      top: -6px;
+      right: -5px;
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      border: 1px solid rgba(255, 255, 255, 0.25);
+      background: #e11d48;
+      color: #ffffff;
+      font-size: 0.72rem;
+      font-weight: 700;
+      cursor: pointer;
+      place-items: center;
+      z-index: 2;
+    }
+    .deck-grid.editing .tile-del { display: grid; }
+
+    .dpad-shell {
+      display: grid;
+      grid-template-columns: 60px 1fr 60px;
+      grid-template-rows: 46px 52px 46px;
+      gap: 7px;
+      align-items: stretch;
+      justify-items: stretch;
+    }
+    .dpad-btn { font-size: 1rem; border-radius: 14px; }
+    .dpad-ok {
+      border-radius: 999px;
+      background: linear-gradient(135deg, rgba(56, 189, 248, 0.28), rgba(99, 102, 241, 0.28));
+      border-color: rgba(56, 189, 248, 0.55);
+      font-size: 0.92rem;
+      font-weight: 700;
+    }
+    .corner-btn { font-size: 0.74rem; color: #cbd5e1; border-radius: 13px; }
+
+    /* TYPE TAB */
+    .draft-area {
+      width: 100%;
+      min-height: 92px;
+      resize: none;
+      background: #070b14;
+      border: 1px solid var(--border);
+      border-radius: 11px;
+      color: var(--text);
+      padding: 10px 12px;
+      font-family: inherit;
+      font-size: 0.94rem;
+      outline: none;
+    }
+    .draft-area:focus { border-color: var(--accent); }
+
+    .keys-grid-4 {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 8px;
+    }
+    .keys-grid-4 .btn {
+      padding: 12px 6px;
+      font-size: 0.82rem;
+    }
+
+    /* HOTKEYS STUDIO */
+    .seg-bar {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+      background: rgba(15, 23, 42, 0.9);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 4px;
+      flex-shrink: 0;
+    }
+    .seg-btn {
+      appearance: none;
+      border: 1px solid transparent;
+      background: transparent;
+      color: var(--muted);
+      border-radius: 10px;
+      padding: 8px 6px;
+      font-size: 0.82rem;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .seg-btn.active {
+      background: rgba(56, 189, 248, 0.16);
+      border-color: rgba(56, 189, 248, 0.42);
+      color: #7dd3fc;
+    }
+
+    .type-pane {
+      display: none;
+      flex-direction: column;
+      gap: 11px;
+    }
+    .type-pane.active {
+      display: flex;
+    }
+
+    .hk-cats {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 5px;
+    }
+    .hk-cats .pill-btn {
+      padding: 6px 4px;
+      text-align: center;
+    }
+    .hk-cats .pill-btn.active {
+      background: rgba(56, 189, 248, 0.18);
+      border-color: rgba(56, 189, 248, 0.55);
+      color: #7dd3fc;
+    }
+
+    .hk-preset-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 7px;
+    }
+    .hk-preset-wrap {
+      position: relative;
+    }
+    .hk-preset-btn {
+      width: 100%;
+      padding: 9px 10px;
+      border-radius: 12px;
+      background: rgba(7, 11, 20, 0.78);
+      justify-content: space-between;
+      gap: 6px;
+    }
+    .hk-preset-name {
+      font-size: 0.79rem;
+      font-weight: 700;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .hk-chord {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.67rem;
+      font-weight: 600;
+      padding: 2px 6px;
+      border-radius: 6px;
+      background: var(--panel-2);
+      border: 1px solid var(--border);
+      color: #93c5fd;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+    .hk-del-btn {
+      position: absolute;
+      top: -5px;
+      right: -4px;
+      width: 19px;
+      height: 19px;
+      border-radius: 50%;
+      border: 1px solid rgba(255, 255, 255, 0.25);
+      background: #e11d48;
+      color: #fff;
+      font-size: 0.65rem;
+      font-weight: 700;
+      cursor: pointer;
+      display: grid;
+      place-items: center;
+    }
+
+    .hk-combo-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+      padding: 8px 10px;
+      background: #070b14;
+      border: 1px solid rgba(56, 189, 248, 0.28);
+      border-radius: 11px;
+    }
+    .hk-preview {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.78rem;
+      font-weight: 700;
+      color: #bae6fd;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      min-width: 0;
+    }
+    .hk-bar-btns {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      flex-shrink: 0;
+    }
+
+    .hk-banks {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 5px;
+    }
+    .hk-banks .pill-btn {
+      padding: 6px 4px;
+      text-align: center;
+    }
+    .hk-banks .pill-btn.active {
+      background: rgba(56, 189, 248, 0.18);
+      border-color: rgba(56, 189, 248, 0.55);
+      color: #7dd3fc;
+    }
+
+    .hk-bank {
+      display: none;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .hk-bank.active {
+      display: flex;
+    }
+
+    .qwerty-row {
+      display: flex;
+      gap: 4px;
+      justify-content: center;
+    }
+    .qwerty-row.r2 { padding: 0 12px; }
+    .qwerty-row.r3 { padding: 0 30px; }
+    .qwerty-key {
+      appearance: none;
+      border: 1px solid var(--border);
+      background: rgba(7, 11, 20, 0.85);
+      color: var(--text);
+      flex: 1;
+      min-width: 0;
+      padding: 11px 0;
+      border-radius: 9px;
+      font-size: 0.84rem;
+      font-weight: 700;
+      cursor: pointer;
+      user-select: none;
+      text-align: center;
+    }
+    .qwerty-key:active {
+      transform: scale(0.94);
+      background: #1e293b;
+      border-color: rgba(56, 189, 248, 0.6);
+    }
+
+    .hk-special-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 5px;
+    }
+    .hk-special-grid .btn {
+      padding: 9px 3px;
+      font-size: 0.74rem;
+      border-radius: 10px;
+    }
+
+    /* MEDIA TAB */
+    .media-np-box {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      padding: 8px 10px;
+      border-radius: 11px;
+      background: #070b14;
+      border: 1px solid var(--border);
+    }
+    .media-np-title {
+      font-size: 0.84rem;
+      font-weight: 700;
+      color: var(--text);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .media-np-sub {
+      font-size: 0.71rem;
+      color: var(--muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .media-transport-hero {
+      display: grid;
+      grid-template-columns: 0.9fr 1.6fr 0.9fr;
+      gap: 8px;
+    }
+    .media-transport-hero .btn {
+      padding: 14px 8px;
+      font-size: 0.9rem;
+    }
+    .media-seek-row {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 6px;
+    }
+    .media-seek-row .btn {
+      padding: 10px 4px;
+      font-size: 0.76rem;
+    }
+    .speed-row {
+      display: grid;
+      grid-template-columns: 0.7fr 0.95fr 0.95fr 1.15fr 0.7fr;
+      gap: 6px;
+    }
+    .speed-row .btn {
+      padding: 11px 4px;
+      font-size: 0.8rem;
+    }
+    .media-vol-row {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 7px;
+    }
+    .media-vol-row .btn {
+      padding: 12px 6px;
+      font-size: 0.84rem;
+    }
+
+    /* Bottom Navigation */
+    .navbar {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 5px;
+      padding: 7px 8px 9px;
+      border-top: 1px solid var(--border);
+      background: rgba(15, 23, 42, 0.94);
+      flex-shrink: 0;
+    }
+    .nav-btn {
+      appearance: none;
+      border: 1px solid transparent;
+      background: transparent;
+      color: var(--muted);
+      border-radius: 13px;
+      padding: 9px 6px;
+      font-size: 0.78rem;
+      font-weight: 700;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 2px;
+      cursor: pointer;
+    }
+    .nav-btn.active {
+      background: rgba(56, 189, 248, 0.14);
+      border-color: rgba(56, 189, 248, 0.35);
+      color: #7dd3fc;
+    }
+
+    /* Modals */
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(2, 6, 23, 0.8);
+      backdrop-filter: blur(8px);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      z-index: 40;
+    }
+    .modal-backdrop.open { display: flex; }
+    .modal {
+      width: 100%;
+      max-width: 396px;
+      max-height: 86vh;
+      overflow-y: auto;
+      background: #0f172a;
+      border: 1px solid var(--border);
+      border-radius: 22px;
+      padding: 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 13px;
+      box-shadow: 0 24px 70px rgba(0, 0, 0, 0.65);
+      scrollbar-width: thin;
+      scrollbar-color: rgba(148, 163, 184, 0.25) transparent;
+    }
+    .modal-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .modal-head h2 { font-size: 0.98rem; font-weight: 700; }
+
+    .setting-row {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      font-size: 0.83rem;
+    }
+    .setting-row-inline {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 0.84rem;
+    }
+    .setting-row input[type="range"] { width: 100%; accent-color: var(--accent); }
+    .setting-row-inline input[type="checkbox"] {
+      width: 18px;
+      height: 18px;
+      accent-color: var(--accent);
+    }
+
+    .select-input {
+      width: 100%;
+      background: #070b14;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      color: var(--text);
+      padding: 8px 10px;
+      font-size: 0.8rem;
+      outline: none;
+    }
+    .power-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 6px;
+    }
+    .power-grid .btn {
+      padding: 9px 4px;
+      font-size: 0.74rem;
+    }
+
+    .peer-list {
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+    }
+    .peer-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 9px 10px;
+      border-radius: 12px;
+      background: rgba(7, 11, 20, 0.72);
+      border: 1px solid var(--border);
+    }
+    .peer-name { font-size: 0.82rem; font-weight: 700; }
+    .peer-sub { font-size: 0.7rem; color: var(--muted); }
+    .peer-tag {
+      font-size: 0.68rem;
+      font-weight: 700;
+      padding: 3px 8px;
+      border-radius: 999px;
+      background: rgba(16, 185, 129, 0.16);
+      color: #6ee7b7;
+      border: 1px solid rgba(16, 185, 129, 0.35);
+      text-decoration: none;
+      white-space: nowrap;
+    }
+    .peer-tag.offline {
+      background: rgba(148, 163, 184, 0.12);
+      color: var(--muted);
+      border-color: var(--border);
+    }
+
+    .icon-choices {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .icon-choice {
+      width: 34px;
+      height: 34px;
+      padding: 0;
+      font-size: 0.95rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="host-meta">
+        <span class="conn-dot" id="connDot"></span>
+        <span class="host-title" id="hostTitle">Connecting...</span>
+        <span class="rtt-pill" id="rttPill">-- ms</span>
+      </div>
+      <div class="top-actions">
+        <button type="button" class="icon-btn" id="peekToggleBtn" title="Screen Peek">👁</button>
+        <button type="button" class="icon-btn" id="moreBtn" title="Settings &amp; Power">⚙</button>
+      </div>
+    </header>
+
+    <div class="live-strip" id="liveStrip">
+      <div class="strip-row" id="nowPlayingRow" style="display:none;">
+        <span class="strip-text" id="nowPlayingText">♪ Nothing playing</span>
+        <button type="button" class="pill-btn" data-media="play_pause">⏯</button>
+      </div>
+      <div class="strip-row" id="sleepTimerRow" style="display:none;">
+        <span class="strip-text" id="sleepTimerText">⏱ Sleep timer</span>
+        <button type="button" class="pill-btn" id="stripCancelTimerBtn">Cancel</button>
+      </div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+    <div class="views">
+      <!-- TAB 1: PAD -->
+      <section class="view active" id="view-pad">
+        <div class="pad-quick">
+          <button type="button" class="btn yt-btn" id="quickYtBtn">▶ YT</button>
+          <button type="button" class="btn accent" data-media="play_pause">⏯</button>
+          <button type="button" class="btn" data-key="F11" title="Toggle Fullscreen (F11)">⛶ F11</button>
+          <button type="button" class="btn danger" id="closeHoverBtn" title="Close window under mouse">✕ Close</button>
+          <button type="button" class="btn" id="jumpTypeBtn" title="Keyboard">⌨</button>
+        </div>
+
+        <div class="peek-panel" id="peekPanel">
+          <div class="peek-toolbar">
+            <span style="font-weight:700;color:#7dd3fc;">👁 Screen Peek</span>
+            <div class="peek-actions">
+              <button type="button" class="btn active-toggle" id="peekModeFullBtn">Full</button>
+              <button type="button" class="btn" id="peekModeCursorBtn">Cursor</button>
+              <button type="button" class="btn" id="peekAutoBtn">Auto</button>
+              <button type="button" class="btn" id="peekRefreshBtn">↻</button>
+              <button type="button" class="btn" id="peekCloseBtn">✕</button>
+            </div>
+          </div>
+          <div class="peek-img-wrap">
+            <div class="peek-status" id="peekStatus">Tap ↻ to view PC screen</div>
+            <img id="peekImg" alt="PC Screen Peek" style="display:none;" />
+          </div>
+        </div>
+
+        <div class="trackpad" id="trackpad">
+          <div class="gesture-badge" id="gestureBadge">Move</div>
+          <div class="touch-glow" id="touchGlow"></div>
+          <div class="trackpad-hint">
+            1-finger: Move/Tap • 2-finger: Scroll / Right click<br />
+            3-finger drag: Switch Workspace / Desktop
+          </div>
+        </div>
+
+        <div class="mouse-buttons">
+          <button type="button" class="btn" id="leftBtn">Left Click</button>
+          <button type="button" class="btn" id="rightBtn">Right Click</button>
+        </div>
+
+        <div class="vol-bar">
+          <button type="button" class="pill-btn" id="muteToggleBtn">🔊</button>
+          <input type="range" id="volRange" min="0" max="100" step="1" value="50" />
+          <span class="vol-pct" id="volPct">--%</span>
+        </div>
+      </section>
+
+      <!-- TAB 2: MEDIA CONTROLLER -->
+      <section class="view" id="view-media">
+        <div class="card">
+          <div class="section-head">
+            <span class="section-label">Transport &amp; Seek</span>
+            <span class="hk-chord" id="mediaStatusBadge">Ready</span>
+          </div>
+          <div class="media-np-box">
+            <div class="media-np-title" id="mediaNpTitle">No active media detected</div>
+            <div class="media-np-sub" id="mediaNpSub">Controls YouTube, Spotify, VLC &amp; browser players</div>
+          </div>
+          <div class="media-transport-hero">
+            <button type="button" class="btn" data-media="prev">⏮ Prev</button>
+            <button type="button" class="btn accent" data-media="play_pause">⏯ Play / Pause</button>
+            <button type="button" class="btn" data-media="next">Next ⏭</button>
+          </div>
+          <div class="media-seek-row">
+            <button type="button" class="btn" data-key="KeyJ">⏪ −10s</button>
+            <button type="button" class="btn" data-key="ArrowLeft">◀ −5s</button>
+            <button type="button" class="btn" data-key="ArrowRight">+5s ▶</button>
+            <button type="button" class="btn" data-key="KeyL">+10s ⏩</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="section-head">
+            <span class="section-label">Playback Speed (Fast Forward)</span>
+            <span class="hk-chord" id="speedBadge">1×</span>
+          </div>
+          <div class="speed-row">
+            <button type="button" class="btn" id="speedDownBtn">−</button>
+            <button type="button" class="btn active-toggle" data-speed="1">1×</button>
+            <button type="button" class="btn" data-speed="1.5">1.5×</button>
+            <button type="button" class="btn accent" data-speed="2">⚡ 2×</button>
+            <button type="button" class="btn" id="speedUpBtn">+</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="section-head">
+            <span class="section-label">Volume &amp; Audio Output</span>
+            <button type="button" class="pill-btn" id="mediaRefreshAudioBtn">↻</button>
+          </div>
+          <div class="media-vol-row">
+            <button type="button" class="btn" id="mediaMuteBtn">🔇 Mute</button>
+            <button type="button" class="btn" id="mediaVolDownBtn">🔉 Vol −</button>
+            <button type="button" class="btn" id="mediaVolUpBtn">🔊 Vol +</button>
+          </div>
+          <div class="vol-bar" style="padding:6px 9px;">
+            <span style="font-size:0.75rem;color:var(--muted);">Level</span>
+            <input type="range" id="mediaVolRange" min="0" max="100" step="1" value="50" />
+            <span class="vol-pct" id="mediaVolPct">--%</span>
+          </div>
+          <select class="select-input" id="mediaAudioSelect">
+            <option value="">Detecting audio outputs...</option>
+          </select>
+        </div>
+
+        <div class="card">
+          <span class="section-label">Video Player Controls</span>
+          <div class="hk-special-grid">
+            <button type="button" class="btn" data-key="KeyF">⛶ Full (F)</button>
+            <button type="button" class="btn" data-key="F11">🖥 F11</button>
+            <button type="button" class="btn" data-key="KeyT">▭ Theater</button>
+            <button type="button" class="btn" data-key="KeyC">💬 Subs</button>
+            <button type="button" class="btn" data-key="Digit0">⏮ Start</button>
+            <button type="button" class="btn" data-key="Digit5">50%</button>
+            <button type="button" class="btn" data-key="KeyM">🔇 Vid Mute</button>
+            <button type="button" class="btn" data-key="KeyI">▣ Mini</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 3: APPS & TV -->
+      <section class="view" id="view-apps">
+        <div class="card">
+          <div class="section-head">
+            <span class="section-label">Open Apps on PC</span>
+            <div style="display:flex;gap:6px;">
+              <button type="button" class="pill-btn" id="appsCloseHoverBtn">✕ Under Mouse</button>
+              <button type="button" class="pill-btn" id="refreshWindowsBtn">↻</button>
+            </div>
+          </div>
+          <div class="win-list" id="winList">
+            <div style="color:var(--muted);font-size:0.82rem;">Loading open apps...</div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="section-head">
+            <span class="section-label">Quick Launch &amp; Search</span>
+            <div style="display:flex;gap:6px;">
+              <button type="button" class="pill-btn" id="resetDeckBtn" style="display:none;">Reset</button>
+              <button type="button" class="pill-btn" id="editDeckBtn">✎</button>
+              <button type="button" class="pill-btn" id="addShortcutBtn">+ Add</button>
+            </div>
+          </div>
+          <input
+            id="launchInput"
+            class="text-input"
+            type="text"
+            placeholder="Search YouTube or paste a URL..."
+          />
+          <div class="launch-pair">
+            <button type="button" class="btn yt-btn" id="searchYtBtn">▶ YouTube</button>
+            <button type="button" class="btn accent" id="openUrlBtn">↗ Open</button>
+          </div>
+          <div class="deck-grid" id="deckGrid"></div>
+        </div>
+
+        <div class="card">
+          <span class="section-label">TV &amp; Browser Controls</span>
+          <div class="dpad-shell">
+            <button type="button" class="btn corner-btn" data-key="Escape">Back</button>
+            <button type="button" class="btn dpad-btn" data-key="ArrowUp">▲</button>
+            <button type="button" class="btn corner-btn" data-key="KeyF">Full</button>
+
+            <button type="button" class="btn dpad-btn" data-key="ArrowLeft">◀</button>
+            <button type="button" class="btn dpad-ok" data-key="Enter">OK</button>
+            <button type="button" class="btn dpad-btn" data-key="ArrowRight">▶</button>
+
+            <button type="button" class="btn corner-btn" data-combo="ctrl:Minus">Zoom −</button>
+            <button type="button" class="btn dpad-btn" data-key="ArrowDown">▼</button>
+            <button type="button" class="btn corner-btn" data-combo="ctrl:Equal">Zoom +</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 3: TYPE & HOTKEYS -->
+      <section class="view" id="view-type">
+        <div class="seg-bar">
+          <button type="button" class="seg-btn active" data-type-pane="keyboard">⌨ Keyboard</button>
+          <button type="button" class="seg-btn" data-type-pane="hotkeys">⚡ Hotkeys</button>
+        </div>
+
+        <div class="type-pane active" id="pane-keyboard">
+          <div class="card">
+            <label class="section-label" for="liveInput">Live Keyboard</label>
+            <input
+              id="liveInput"
+              class="text-input"
+              type="text"
+              autocomplete="off"
+              autocorrect="off"
+              autocapitalize="none"
+              spellcheck="false"
+              placeholder="Tap here to type live on PC..."
+            />
+          </div>
+
+          <div class="card">
+            <label class="section-label" for="draftArea">Voice Dictation or Paste URL</label>
+            <textarea
+              id="draftArea"
+              class="draft-area"
+              placeholder="Dictate with your phone mic or paste text/URL..."
+            ></textarea>
+            <div class="launch-pair">
+              <button type="button" class="btn accent" id="sendEnterBtn">Type + ↵</button>
+              <button type="button" class="btn" id="sendPasteBtn">Paste to PC</button>
+            </div>
+          </div>
+
+          <div class="card">
+            <span class="section-label">Essential Keys</span>
+            <div class="keys-grid-4">
+              <button type="button" class="btn" data-key="Escape">Esc</button>
+              <button type="button" class="btn" data-key="Backspace">Bksp</button>
+              <button type="button" class="btn" data-key="Tab">Tab</button>
+              <button type="button" class="btn accent" data-key="Enter">Enter</button>
+
+              <button type="button" class="btn" data-key="ArrowLeft">←</button>
+              <button type="button" class="btn" data-key="ArrowUp">↑</button>
+              <button type="button" class="btn" data-key="ArrowDown">↓</button>
+              <button type="button" class="btn" data-key="ArrowRight">→</button>
+            </div>
+            <div class="keys-grid-4">
+              <button type="button" class="btn" data-mod="ctrl">Ctrl</button>
+              <button type="button" class="btn" data-mod="alt">Alt</button>
+              <button type="button" class="btn" data-mod="shift">Shift</button>
+              <button type="button" class="btn" data-mod="super">Super</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="type-pane" id="pane-hotkeys">
+          <div class="card">
+            <div class="section-head">
+              <span class="section-label">Preset Hotkeys</span>
+            </div>
+            <div class="hk-cats" id="hkCats">
+              <button type="button" class="pill-btn active" data-hk-cat="common">Common</button>
+              <button type="button" class="pill-btn" data-hk-cat="browser">Browser</button>
+              <button type="button" class="pill-btn" data-hk-cat="desktop">Desktop</button>
+              <button type="button" class="pill-btn" data-hk-cat="saved">Saved</button>
+            </div>
+            <div class="hk-preset-grid" id="hkPresetGrid"></div>
+          </div>
+
+          <div class="card">
+            <span class="section-label">Hotkey Builder (All Keys)</span>
+            <div class="hk-combo-bar">
+              <span class="hk-preview" id="hkPreview">Tap modifiers + any key</span>
+              <div class="hk-bar-btns">
+                <button type="button" class="pill-btn" id="hkLockBtn">Lock</button>
+                <button type="button" class="pill-btn" id="hkSaveBtn">★ Save</button>
+                <button type="button" class="pill-btn" id="hkClearBtn">Clear</button>
+              </div>
+            </div>
+
+            <div class="keys-grid-4" id="hkModsRow">
+              <button type="button" class="btn" data-hk-mod="ctrl">Ctrl</button>
+              <button type="button" class="btn" data-hk-mod="alt">Alt</button>
+              <button type="button" class="btn" data-hk-mod="shift">Shift</button>
+              <button type="button" class="btn" data-hk-mod="super">Super</button>
+            </div>
+
+            <div class="hk-banks" id="hkBanks">
+              <button type="button" class="pill-btn active" data-hk-bank="alpha">A–Z</button>
+              <button type="button" class="pill-btn" data-hk-bank="numfn">0–9 &amp; F1–F12</button>
+              <button type="button" class="pill-btn" data-hk-bank="special">Keys &amp; Symbols</button>
+            </div>
+
+            <div class="hk-bank active" id="hkBank-alpha"></div>
+            <div class="hk-bank" id="hkBank-numfn"></div>
+            <div class="hk-bank" id="hkBank-special"></div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <nav class="navbar">
+      <button type="button" class="nav-btn active" data-tab="pad">
+        <span>🖱</span><span>Pad</span>
+      </button>
+      <button type="button" class="nav-btn" data-tab="media">
+        <span>🎬</span><span>Media</span>
+      </button>
+      <button type="button" class="nav-btn" data-tab="apps">
+        <span>🪟</span><span>Apps</span>
+      </button>
+      <button type="button" class="nav-btn" data-tab="type">
+        <span>⌨</span><span>Type</span>
+      </button>
+    </nav>
+  </div>
+
+  <!-- More, Settings, Audio, Sleep Timer, Power & Tailnet Modal -->
+  <div class="modal-backdrop" id="moreModal">
+    <div class="modal">
+      <div class="modal-head">
+        <h2>Settings &amp; PC Controls</h2>
+        <button type="button" class="icon-btn" id="closeMoreBtn">✕</button>
+      </div>
+
+      <div class="setting-row">
+        <div class="section-head">
+          <span class="section-label">Audio Output</span>
+          <button type="button" class="pill-btn" id="refreshAudioBtn">↻</button>
+        </div>
+        <select class="select-input" id="audioOutputSelect">
+          <option value="">Detecting audio outputs...</option>
+        </select>
+      </div>
+
+      <div class="setting-row">
+        <div class="setting-row-inline">
+          <span>Trackpad Speed</span>
+          <strong id="sensLabel">1.3x</strong>
+        </div>
+        <input type="range" id="sensRange" min="0.4" max="3.0" step="0.1" />
+      </div>
+
+      <div class="setting-row">
+        <div class="setting-row-inline">
+          <span>Scroll Speed</span>
+          <strong id="scrollLabel">1.2x</strong>
+        </div>
+        <input type="range" id="scrollRange" min="0.5" max="3.0" step="0.1" />
+      </div>
+
+      <label class="setting-row-inline">
+        <span>Natural Scroll</span>
+        <input type="checkbox" id="naturalScrollCheck" />
+      </label>
+      <label class="setting-row-inline">
+        <span>Tap-to-Click</span>
+        <input type="checkbox" id="tapClickCheck" />
+      </label>
+      <label class="setting-row-inline">
+        <span>Keep Phone Screen Awake</span>
+        <input type="checkbox" id="wakeSettingCheck" />
+      </label>
+      <label class="setting-row-inline">
+        <span>Launch Links in App Window</span>
+        <input type="checkbox" id="appModeCheck" />
+      </label>
+
+      <div class="setting-row">
+        <div class="section-head">
+          <span class="section-label">Sleep Timer</span>
+          <span id="timerCardStatus" style="font-size:0.74rem;color:var(--muted);">Off</span>
+        </div>
+        <div style="display:flex;gap:6px;">
+          <select class="select-input" id="sleepActionSelect" style="flex:1;">
+            <option value="sleep">Pause + Sleep PC</option>
+            <option value="display_off">Pause + Display Off</option>
+            <option value="pause_only">Pause Media Only</option>
+          </select>
+          <button type="button" class="pill-btn" id="cancelTimerBtn" style="display:none;">Cancel</button>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;">
+          <button type="button" class="btn" data-timer="15" style="padding:8px;">15m</button>
+          <button type="button" class="btn" data-timer="30" style="padding:8px;">30m</button>
+          <button type="button" class="btn" data-timer="60" style="padding:8px;">60m</button>
+        </div>
+      </div>
+
+      <div class="setting-row">
+        <span class="section-label">PC Power</span>
+        <div class="power-grid">
+          <button type="button" class="btn" data-power="display_off" data-power-label="Turn Display Off">🖥 Display Off</button>
+          <button type="button" class="btn" data-power="lock" data-power-label="Lock PC">🔒 Lock</button>
+          <button type="button" class="btn" data-power="sleep" data-power-label="Sleep PC">🌙 Sleep</button>
+          <button type="button" class="btn danger" data-power="reboot" data-power-label="Reboot PC">↻ Reboot</button>
+          <button type="button" class="btn danger" data-power="shutdown" data-power-label="Shutdown PC">⏻ Shutdown</button>
+          <button type="button" class="btn" id="moreCloseWindowBtn">✕ Close App</button>
+        </div>
+      </div>
+
+      <div class="setting-row">
+        <div class="section-head">
+          <span class="section-label">Switch Tailnet PC</span>
+          <button type="button" class="pill-btn" id="refreshPeersBtn">↻</button>
+        </div>
+        <div class="peer-list" id="peerList">
+          <div style="color:var(--muted);font-size:0.8rem;">Tap ↻ to scan Tailnet devices</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add Shortcut Modal -->
+  <div class="modal-backdrop" id="addShortcutModal">
+    <div class="modal">
+      <div class="modal-head">
+        <h2>Add Quick-Launch Shortcut</h2>
+        <button type="button" class="icon-btn" id="closeAddShortcutBtn">✕</button>
+      </div>
+      <div class="setting-row">
+        <span>Name</span>
+        <input type="text" class="text-input" id="scNameInput" placeholder="e.g. Jellyfin" maxlength="36" />
+      </div>
+      <div class="setting-row">
+        <span>URL</span>
+        <input type="text" class="text-input" id="scUrlInput" placeholder="https://jellyfin.local:8096" />
+      </div>
+      <div class="setting-row">
+        <span>Icon</span>
+        <div class="icon-choices" id="iconChoices">
+          <button type="button" class="btn icon-choice active-toggle" data-icon="★">★</button>
+          <button type="button" class="btn icon-choice" data-icon="▶">▶</button>
+          <button type="button" class="btn icon-choice" data-icon="📺">📺</button>
+          <button type="button" class="btn icon-choice" data-icon="🎬">🎬</button>
+          <button type="button" class="btn icon-choice" data-icon="♫">♫</button>
+          <button type="button" class="btn icon-choice" data-icon="🎮">🎮</button>
+          <button type="button" class="btn icon-choice" data-icon="🌐">🌐</button>
+        </div>
+      </div>
+      <div class="setting-row-inline">
+        <span>Color</span>
+        <input type="color" id="scColorInput" value="#38bdf8" style="width:44px;height:30px;border:none;background:none;" />
+      </div>
+      <button type="button" class="btn accent" id="saveShortcutBtn">Save Shortcut</button>
+    </div>
+  </div>
+
+  <!-- Save Hotkey Modal -->
+  <div class="modal-backdrop" id="saveHotkeyModal">
+    <div class="modal">
+      <div class="modal-head">
+        <h2>Save Custom Hotkey</h2>
+        <button type="button" class="icon-btn" id="closeSaveHotkeyBtn">✕</button>
+      </div>
+      <div class="setting-row">
+        <span>Label</span>
+        <input type="text" class="text-input" id="hkSaveNameInput" placeholder="e.g. Next Workspace" maxlength="28" />
+      </div>
+      <div class="setting-row-inline">
+        <span>Combo</span>
+        <span class="hk-chord" id="hkSaveChordLabel">Ctrl + C</span>
+      </div>
+      <button type="button" class="btn accent" id="confirmSaveHotkeyBtn">Save to Presets</button>
+    </div>
+  </div>
+
+  <!-- Power Confirmation Modal -->
+  <div class="modal-backdrop" id="confirmPowerModal">
+    <div class="modal">
+      <div class="modal-head">
+        <h2 id="confirmPowerTitle">Confirm Power Action</h2>
+        <button type="button" class="icon-btn" id="closePowerModalBtn">✕</button>
+      </div>
+      <p id="confirmPowerDesc" style="font-size:0.86rem;color:#cbd5e1;line-height:1.45;"></p>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+        <button type="button" class="btn" id="cancelPowerBtn">Cancel</button>
+        <button type="button" class="btn danger" id="confirmPowerExecBtn">Confirm</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      const params = new URLSearchParams(location.search);
+      const tokenFromUrl = params.get("t") || "";
+      if (tokenFromUrl) {
+        try {
+          history.replaceState({}, "", "/" + location.hash);
+        } catch {}
+      }
+
+      async function apiFetch(path, opts = {}) {
+        const headers = new Headers(opts.headers || undefined);
+        if (tokenFromUrl && !headers.has("X-TSR-Token")) {
+          headers.set("X-TSR-Token", tokenFromUrl);
+        }
+        return fetch(path, { ...opts, headers });
+      }
+
+      const DEFAULT_SETTINGS = {
+        sens: 1.3,
+        scrollSpeed: 1.2,
+        naturalScroll: true,
+        tapToClick: true,
+        haptics: true,
+        wakeLock: false,
+        appMode: false,
+      };
+      let settings = { ...DEFAULT_SETTINGS };
+      try {
+        const saved = JSON.parse(localStorage.getItem("tsr_settings") || "null");
+        if (saved && typeof saved === "object") {
+          settings = { ...DEFAULT_SETTINGS, ...saved };
+        }
+      } catch {}
+
+      function saveSettings() {
+        try { localStorage.setItem("tsr_settings", JSON.stringify(settings)); } catch {}
+      }
+
+      function haptic(ms = 8) {
+        if (settings.haptics && navigator.vibrate) {
+          try { navigator.vibrate(ms); } catch {}
+        }
+      }
+
+      const toastEl = document.getElementById("toast");
+      let toastTimer = null;
+      function showToast(msg) {
+        toastEl.textContent = msg;
+        toastEl.classList.add("show");
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => toastEl.classList.remove("show"), 2000);
+      }
+
+      function escapeHtml(str) {
+        return String(str)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&#39;");
+      }
+
+      // Connection & WebSocket
+      const connDot = document.getElementById("connDot");
+      const hostTitle = document.getElementById("hostTitle");
+      const rttPill = document.getElementById("rttPill");
+      let ws = null;
+      let reconnectDelay = 600;
+      let reconnectTimer = null;
+      let pingTimer = null;
+
+      function sendMsg(obj) {
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify(obj));
+          return true;
+        }
+        return false;
+      }
+
+      function connectWs() {
+        if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
+          return;
+        }
+        clearTimeout(reconnectTimer);
+        connDot.className = "conn-dot";
+
+        const proto = location.protocol === "https:" ? "wss:" : "ws:";
+        const qs = tokenFromUrl ? `?t=${encodeURIComponent(tokenFromUrl)}` : "";
+        ws = new WebSocket(`${proto}//${location.host}/ws/remote${qs}`);
+
+        ws.onopen = () => {
+          reconnectDelay = 600;
+          connDot.className = "conn-dot ok";
+          clearInterval(pingTimer);
+          sendMsg({ t: "ping", ts: Date.now() });
+          pingTimer = setInterval(() => sendMsg({ t: "ping", ts: Date.now() }), 3000);
+        };
+
+        ws.onmessage = (ev) => {
+          try {
+            const msg = JSON.parse(ev.data);
+            if (msg.t === "hello") {
+              hostTitle.textContent = msg.hostname || "Media PC";
+            } else if (msg.t === "pong") {
+              rttPill.textContent = `${Math.max(1, Date.now() - msg.ts)} ms`;
+            }
+          } catch {}
+        };
+
+        ws.onclose = () => {
+          clearInterval(pingTimer);
+          connDot.className = "conn-dot err";
+          rttPill.textContent = "offline";
+          reconnectTimer = setTimeout(connectWs, reconnectDelay);
+          reconnectDelay = Math.min(reconnectDelay * 1.6, 5000);
+        };
+
+        ws.onerror = () => {
+          try { ws.close(); } catch {}
+        };
+      }
+
+      // 3-Tab Navigation + Hash Support
+      const navBtns = document.querySelectorAll(".nav-btn");
+      const views = document.querySelectorAll(".view");
+      const typeSegBtns = document.querySelectorAll("[data-type-pane]");
+      const typePanes = document.querySelectorAll(".type-pane");
+
+      function switchTypePane(pane) {
+        if (!["keyboard", "hotkeys"].includes(pane)) pane = "keyboard";
+        typeSegBtns.forEach((b) => b.classList.toggle("active", b.dataset.typePane === pane));
+        typePanes.forEach((p) => p.classList.toggle("active", p.id === `pane-${pane}`));
+      }
+
+      typeSegBtns.forEach((btn) => {
+        btn.addEventListener("click", () => {
+          haptic(6);
+          switchTypePane(btn.dataset.typePane);
+        });
+      });
+
+      function switchTab(name) {
+        if (name === "hotkeys") {
+          name = "type";
+          switchTypePane("hotkeys");
+        }
+        if (!["pad", "media", "apps", "type"].includes(name)) name = "pad";
+        navBtns.forEach((b) => b.classList.toggle("active", b.dataset.tab === name));
+        views.forEach((v) => v.classList.toggle("active", v.id === `view-${name}`));
+        if (name === "apps") {
+          loadWindows();
+        } else if (name === "media") {
+          refreshAudio();
+          refreshNowPlaying();
+        }
+      }
+
+      navBtns.forEach((btn) => {
+        btn.addEventListener("click", () => {
+          haptic(6);
+          switchTab(btn.dataset.tab);
+        });
+      });
+
+      function applyHashTab() {
+        const h = (location.hash || "").replace(/^#/, "");
+        if (h === "hotkeys") {
+          switchTab("type");
+          switchTypePane("hotkeys");
+        } else if (h) {
+          switchTab(h);
+        }
+      }
+      window.addEventListener("hashchange", applyHashTab);
+      applyHashTab();
+
+      document.getElementById("jumpTypeBtn").addEventListener("click", () => {
+        haptic(8);
+        switchTab("type");
+        switchTypePane("keyboard");
+        setTimeout(() => document.getElementById("liveInput").focus(), 40);
+      });
+
+      // Wake Lock
+      const wakeSettingCheck = document.getElementById("wakeSettingCheck");
+      let wakeSentinel = null;
+      async function syncWakeLock() {
+        wakeSettingCheck.checked = settings.wakeLock;
+        if (!("wakeLock" in navigator)) return;
+        if (settings.wakeLock && document.visibilityState === "visible") {
+          try {
+            if (!wakeSentinel) {
+              wakeSentinel = await navigator.wakeLock.request("screen");
+              wakeSentinel.addEventListener("release", () => { wakeSentinel = null; });
+            }
+          } catch {}
+        } else if (!settings.wakeLock && wakeSentinel) {
+          try { await wakeSentinel.release(); } catch {}
+          wakeSentinel = null;
+        }
+      }
+      syncWakeLock();
+
+      document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState === "visible") {
+          connectWs();
+          syncWakeLock();
+          refreshNowPlaying();
+          refreshSleepTimer();
+        }
+      });
+      window.addEventListener("focus", connectWs);
+      connectWs();
+
+      // Sticky Modifiers
+      const modState = { ctrl: 0, alt: 0, shift: 0, super: 0 };
+      const modBtns = document.querySelectorAll("[data-mod]");
+      function renderModifiers() {
+        modBtns.forEach((btn) => {
+          const m = btn.dataset.mod;
+          btn.classList.remove("active-toggle", "locked-toggle");
+          if (modState[m] === 1) btn.classList.add("active-toggle");
+          if (modState[m] === 2) btn.classList.add("locked-toggle");
+        });
+      }
+      modBtns.forEach((btn) => {
+        btn.addEventListener("click", () => {
+          haptic(8);
+          const m = btn.dataset.mod;
+          modState[m] = (modState[m] + 1) % 3;
+          renderModifiers();
+        });
+      });
+      function activeModifierList() {
+        return ["ctrl", "alt", "shift", "super"].filter((k) => modState[k] > 0);
+      }
+      function clearOneShotModifiers() {
+        let changed = false;
+        for (const k of ["ctrl", "alt", "shift", "super"]) {
+          if (modState[k] === 1) { modState[k] = 0; changed = true; }
+        }
+        if (changed) renderModifiers();
+      }
+      function sendKeyAction(code, extraMods) {
+        const mods = extraMods && extraMods.length ? extraMods : activeModifierList();
+        sendMsg({ t: "key", code, mods });
+        if (!extraMods) clearOneShotModifiers();
+      }
+
+      document.querySelectorAll("[data-media]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          haptic(8);
+          sendMsg({ t: "media", action: btn.dataset.media });
+          setTimeout(refreshNowPlaying, 350);
+          setTimeout(refreshAudio, 250);
+        });
+      });
+      document.querySelectorAll("[data-key]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          haptic(8);
+          sendKeyAction(btn.dataset.key);
+        });
+      });
+      document.querySelectorAll("[data-combo]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          haptic(10);
+          const [modsPart, code] = btn.dataset.combo.split(":");
+          sendKeyAction(code, modsPart.split("+").filter(Boolean));
+        });
+      });
+
+      // Mouse Click Hold Buttons
+      function bindHoldButton(el, btnName) {
+        let isDown = false;
+        const press = (e) => {
+          e.preventDefault();
+          if (isDown) return;
+          isDown = true;
+          el.classList.add("pressed");
+          haptic(10);
+          sendMsg({ t: "click", btn: btnName, down: true });
+        };
+        const release = (e) => {
+          if (e) e.preventDefault();
+          if (!isDown) return;
+          isDown = false;
+          el.classList.remove("pressed");
+          sendMsg({ t: "click", btn: btnName, down: false });
+        };
+        el.addEventListener("touchstart", press, { passive: false });
+        el.addEventListener("touchend", release, { passive: false });
+        el.addEventListener("touchcancel", release, { passive: false });
+        el.addEventListener("mousedown", press);
+        window.addEventListener("mouseup", release);
+      }
+      bindHoldButton(document.getElementById("leftBtn"), "left");
+      bindHoldButton(document.getElementById("rightBtn"), "right");
+
+      // Multi-touch Trackpad Engine
+      const trackpad = document.getElementById("trackpad");
+      const gestureBadge = document.getElementById("gestureBadge");
+      const touchGlow = document.getElementById("touchGlow");
+      let badgeTimer = null;
+      function showBadge(label) {
+        gestureBadge.textContent = label;
+        gestureBadge.classList.add("show");
+        clearTimeout(badgeTimer);
+        badgeTimer = setTimeout(() => gestureBadge.classList.remove("show"), 700);
+      }
+
+      let pendingDx = 0, pendingDy = 0, remX = 0, remY = 0, rafScheduled = false;
+      function flushMove() {
+        rafScheduled = false;
+        const dx = Math.trunc(pendingDx), dy = Math.trunc(pendingDy);
+        pendingDx -= dx; pendingDy -= dy;
+        if (dx !== 0 || dy !== 0) sendMsg({ t: "move", dx, dy });
+      }
+      function queueMove(rawDx, rawDy) {
+        const dist = Math.hypot(rawDx, rawDy);
+        if (dist === 0) return;
+        const accel = Math.min(2.6, 0.72 + Math.pow(dist, 0.25) * 0.42);
+        const scaledX = rawDx * settings.sens * accel + remX;
+        const scaledY = rawDy * settings.sens * accel + remY;
+        const intX = Math.trunc(scaledX), intY = Math.trunc(scaledY);
+        remX = scaledX - intX; remY = scaledY - intY;
+        pendingDx += intX; pendingDy += intY;
+        if (!rafScheduled) {
+          rafScheduled = true;
+          requestAnimationFrame(flushMove);
+        }
+      }
+
+      let activeTouches = new Map();
+      let maxFingers = 0, gestureStartTs = 0, totalTravel = 0;
+      let scrollAccumX = 0, scrollAccumY = 0, lastTapTs = 0, tapAndHoldDragging = false, prevTwoCenter = null;
+      let prevThreeCenter = null, threeAccumX = 0, threeCooldownUntil = 0;
+
+      function getCenter(touches) {
+        let sx = 0, sy = 0;
+        for (const t of touches) { sx += t.clientX; sy += t.clientY; }
+        return { x: sx / touches.length, y: sy / touches.length };
+      }
+
+      function triggerWorkspaceSwipe(dir) {
+        showBadge(dir === "next" ? "Workspace →" : "← Workspace");
+        haptic(14);
+        apiFetch("/api/workspace", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ dir }),
+        }).catch(() => {});
+      }
+
+      trackpad.addEventListener("touchstart", (e) => {
+        e.preventDefault();
+        const now = performance.now();
+        if (activeTouches.size === 0) {
+          maxFingers = e.touches.length;
+          gestureStartTs = now;
+          totalTravel = 0;
+          scrollAccumX = 0;
+          scrollAccumY = 0;
+          prevTwoCenter = null;
+          prevThreeCenter = null;
+          threeAccumX = 0;
+          if (e.touches.length === 1 && now - lastTapTs < 260 && settings.tapToClick) {
+            tapAndHoldDragging = true;
+            sendMsg({ t: "click", btn: "left", down: true });
+            showBadge("Drag Hold");
+            haptic(10);
+          }
+        } else {
+          maxFingers = Math.max(maxFingers, e.touches.length);
+        }
+        for (const t of e.changedTouches) activeTouches.set(t.identifier, { x: t.clientX, y: t.clientY });
+        if (e.touches.length >= 3) {
+          prevThreeCenter = getCenter(e.touches);
+          threeAccumX = 0;
+          prevTwoCenter = null;
+        } else if (e.touches.length === 2 && maxFingers === 2) {
+          prevTwoCenter = getCenter(e.touches);
+        }
+      }, { passive: false });
+
+      trackpad.addEventListener("touchmove", (e) => {
+        e.preventDefault();
+        const rect = trackpad.getBoundingClientRect();
+        if (e.touches.length > 0) {
+          touchGlow.style.left = `${e.touches[0].clientX - rect.left}px`;
+          touchGlow.style.top = `${e.touches[0].clientY - rect.top}px`;
+          touchGlow.style.opacity = "1";
+        }
+        if (e.touches.length === 1 && maxFingers === 1) {
+          const t = e.touches[0], prev = activeTouches.get(t.identifier);
+          if (prev) {
+            const dx = t.clientX - prev.x, dy = t.clientY - prev.y;
+            totalTravel += Math.hypot(dx, dy);
+            queueMove(dx, dy);
+            activeTouches.set(t.identifier, { x: t.clientX, y: t.clientY });
+          }
+        } else if (e.touches.length >= 3) {
+          const center = getCenter(e.touches);
+          if (prevThreeCenter) {
+            const dx = center.x - prevThreeCenter.x;
+            const dy = center.y - prevThreeCenter.y;
+            totalTravel += Math.hypot(dx, dy);
+            threeAccumX += dx;
+            const now = performance.now();
+            if (Math.abs(threeAccumX) >= 55 && now >= threeCooldownUntil) {
+              const movedRight = threeAccumX > 0;
+              const dir = settings.naturalScroll
+                ? (movedRight ? "prev" : "next")
+                : (movedRight ? "next" : "prev");
+              triggerWorkspaceSwipe(dir);
+              threeAccumX = 0;
+              threeCooldownUntil = now + 340;
+            }
+          }
+          prevThreeCenter = center;
+          for (const t of e.changedTouches) activeTouches.set(t.identifier, { x: t.clientX, y: t.clientY });
+        } else if (e.touches.length === 2 && maxFingers === 2) {
+          const center = getCenter(e.touches);
+          if (prevTwoCenter) {
+            const dx = center.x - prevTwoCenter.x, dy = center.y - prevTwoCenter.y;
+            totalTravel += Math.hypot(dx, dy);
+            const sign = settings.naturalScroll ? 1 : -1;
+            const stepPx = 18 / settings.scrollSpeed;
+            scrollAccumX += dx * sign;
+            scrollAccumY += dy * sign;
+            let outDx = 0, outDy = 0;
+            if (Math.abs(scrollAccumY) >= stepPx) {
+              outDy = Math.trunc(scrollAccumY / stepPx);
+              scrollAccumY -= outDy * stepPx;
+            }
+            if (Math.abs(scrollAccumX) >= stepPx) {
+              outDx = Math.trunc(scrollAccumX / stepPx);
+              scrollAccumX -= outDx * stepPx;
+            }
+            if (outDx !== 0 || outDy !== 0) {
+              sendMsg({ t: "scroll", dx: outDx, dy: outDy });
+              showBadge("Scroll");
+            }
+          }
+          prevTwoCenter = center;
+          for (const t of e.changedTouches) activeTouches.set(t.identifier, { x: t.clientX, y: t.clientY });
+        }
+      }, { passive: false });
+
+      function endTouch(e) {
+        e.preventDefault();
+        for (const t of e.changedTouches) activeTouches.delete(t.identifier);
+        if (e.touches.length === 0) {
+          touchGlow.style.opacity = "0";
+          const elapsed = performance.now() - gestureStartTs;
+          if (tapAndHoldDragging) {
+            tapAndHoldDragging = false;
+            sendMsg({ t: "click", btn: "left", down: false });
+            showBadge("Drop");
+          } else if (settings.tapToClick && totalTravel < 11) {
+            if (maxFingers === 1 && elapsed < 220) {
+              sendMsg({ t: "click", btn: "left" });
+              lastTapTs = performance.now();
+              showBadge("Left Click");
+              haptic(8);
+            } else if (maxFingers === 2 && elapsed < 250) {
+              sendMsg({ t: "click", btn: "right" });
+              showBadge("Right Click");
+              haptic(12);
+            } else if (maxFingers >= 3 && elapsed < 270) {
+              sendMsg({ t: "click", btn: "middle" });
+              showBadge("Middle Click");
+              haptic(14);
+            }
+          }
+          maxFingers = 0;
+          prevTwoCenter = null;
+          prevThreeCenter = null;
+          threeAccumX = 0;
+        } else if (e.touches.length === 2 && maxFingers === 2) {
+          prevTwoCenter = getCenter(e.touches);
+        }
+      }
+      trackpad.addEventListener("touchend", endTouch, { passive: false });
+      trackpad.addEventListener("touchcancel", endTouch, { passive: false });
+
+      // Desktop mouse fallback on trackpad
+      let mouseTracking = false, lastMouseX = 0, lastMouseY = 0, mouseMovedDist = 0;
+      trackpad.addEventListener("mousedown", (e) => {
+        if (e.button !== 0) return;
+        mouseTracking = true; lastMouseX = e.clientX; lastMouseY = e.clientY; mouseMovedDist = 0;
+      });
+      window.addEventListener("mousemove", (e) => {
+        if (!mouseTracking) return;
+        const dx = e.clientX - lastMouseX, dy = e.clientY - lastMouseY;
+        lastMouseX = e.clientX; lastMouseY = e.clientY;
+        mouseMovedDist += Math.hypot(dx, dy);
+        queueMove(dx, dy);
+      });
+      window.addEventListener("mouseup", () => {
+        if (!mouseTracking) return;
+        mouseTracking = false;
+        if (settings.tapToClick && mouseMovedDist < 4) {
+          sendMsg({ t: "click", btn: "left" });
+          showBadge("Left Click");
+        }
+      });
+
+      // Close Window Under Mouse & Open Apps Switcher
+      async function closeHoveredWindow() {
+        haptic(12);
+        try {
+          const resp = await apiFetch("/api/windows/close", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({}),
+          });
+          const data = await resp.json().catch(() => ({}));
+          if (resp.ok) {
+            showToast(`Closed: ${data.closed || "Window"}`);
+            if (document.getElementById("view-apps").classList.contains("active")) {
+              setTimeout(loadWindows, 200);
+            }
+          } else {
+            showToast(data.error || "No window to close");
+          }
+        } catch {
+          showToast("Failed to close window");
+        }
+      }
+      document.getElementById("closeHoverBtn").addEventListener("click", closeHoveredWindow);
+      document.getElementById("appsCloseHoverBtn").addEventListener("click", closeHoveredWindow);
+      document.getElementById("moreCloseWindowBtn").addEventListener("click", () => {
+        moreModal.classList.remove("open");
+        closeHoveredWindow();
+      });
+
+      const winListEl = document.getElementById("winList");
+      async function loadWindows() {
+        try {
+          const resp = await apiFetch("/api/windows");
+          if (!resp.ok) return;
+          const wins = await resp.json();
+          if (!Array.isArray(wins) || wins.length === 0) {
+            winListEl.innerHTML = `<div style="color:var(--muted);font-size:0.82rem;">No open desktop windows detected.</div>`;
+            return;
+          }
+          winListEl.innerHTML = "";
+          for (const w of wins) {
+            const row = document.createElement("div");
+            row.className = "win-item" + (w.focused ? " focused" : "");
+
+            const focusBtn = document.createElement("button");
+            focusBtn.type = "button";
+            focusBtn.className = "win-focus-btn";
+
+            const titleEl = document.createElement("div");
+            titleEl.className = "win-title";
+            titleEl.textContent = w.title;
+
+            const subEl = document.createElement("div");
+            subEl.className = "win-sub";
+            const appSpan = document.createElement("span");
+            appSpan.textContent = `${w.app} • WS ${w.workspace}`;
+            subEl.appendChild(appSpan);
+
+            if (w.focused) {
+              const t = document.createElement("span");
+              t.className = "win-tag";
+              t.textContent = "Active";
+              subEl.appendChild(t);
+            }
+            if (w.under_cursor) {
+              const t = document.createElement("span");
+              t.className = "win-tag cursor";
+              t.textContent = "Under Mouse";
+              subEl.appendChild(t);
+            }
+
+            focusBtn.appendChild(titleEl);
+            focusBtn.appendChild(subEl);
+            focusBtn.addEventListener("click", async () => {
+              haptic(8);
+              const r = await apiFetch("/api/windows/focus", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ id: w.id }),
+              });
+              if (r.ok) {
+                showToast(`Switched to ${w.app}`);
+                setTimeout(loadWindows, 150);
+              } else {
+                showToast("Could not switch window");
+              }
+            });
+
+            const closeBtn = document.createElement("button");
+            closeBtn.type = "button";
+            closeBtn.className = "win-close-btn";
+            closeBtn.textContent = "✕";
+            closeBtn.title = `Close ${w.title}`;
+            closeBtn.addEventListener("click", async () => {
+              haptic(12);
+              const r = await apiFetch("/api/windows/close", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ id: w.id }),
+              });
+              if (r.ok) {
+                showToast(`Closed ${w.app}`);
+                setTimeout(loadWindows, 220);
+              } else {
+                showToast("Could not close window");
+              }
+            });
+
+            row.appendChild(focusBtn);
+            row.appendChild(closeBtn);
+            winListEl.appendChild(row);
+          }
+        } catch {
+          winListEl.innerHTML = `<div style="color:var(--muted);font-size:0.82rem;">Failed to load windows.</div>`;
+        }
+      }
+      document.getElementById("refreshWindowsBtn").addEventListener("click", () => {
+        haptic(6);
+        loadWindows();
+      });
+
+      // Screen Peek
+      const peekToggleBtn = document.getElementById("peekToggleBtn");
+      const peekPanel = document.getElementById("peekPanel");
+      const peekImg = document.getElementById("peekImg");
+      const peekStatus = document.getElementById("peekStatus");
+      const peekModeFullBtn = document.getElementById("peekModeFullBtn");
+      const peekModeCursorBtn = document.getElementById("peekModeCursorBtn");
+      const peekAutoBtn = document.getElementById("peekAutoBtn");
+      let peekOpen = false, peekMode = "full", peekAutoTimer = null, peekBusy = false;
+
+      async function captureScreenPeek() {
+        if (peekBusy) return;
+        peekBusy = true;
+        try {
+          const resp = await apiFetch(`/api/screen?mode=${peekMode}&ts=${Date.now()}`);
+          if (!resp.ok) {
+            const errJson = await resp.json().catch(() => ({}));
+            peekStatus.style.display = "block";
+            peekStatus.textContent = errJson.error || "Screen capture unavailable";
+            peekImg.style.display = "none";
+            return;
+          }
+          const blob = await resp.blob();
+          const url = URL.createObjectURL(blob);
+          const oldUrl = peekImg.dataset.objUrl;
+          peekImg.src = url;
+          peekImg.dataset.objUrl = url;
+          peekImg.style.display = "block";
+          peekStatus.style.display = "none";
+          if (oldUrl) URL.revokeObjectURL(oldUrl);
+        } catch {
+          peekStatus.style.display = "block";
+          peekStatus.textContent = "Screen capture failed";
+        } finally {
+          peekBusy = false;
+        }
+      }
+
+      function setPeekOpen(open) {
+        peekOpen = open;
+        peekPanel.classList.toggle("open", open);
+        peekToggleBtn.classList.toggle("on", open);
+        if (open) {
+          switchTab("pad");
+          captureScreenPeek();
+        } else {
+          clearInterval(peekAutoTimer);
+          peekAutoTimer = null;
+          peekAutoBtn.classList.remove("active-toggle");
+        }
+      }
+      peekToggleBtn.addEventListener("click", () => { haptic(8); setPeekOpen(!peekOpen); });
+      document.getElementById("peekCloseBtn").addEventListener("click", () => setPeekOpen(false));
+      document.getElementById("peekRefreshBtn").addEventListener("click", () => { haptic(6); captureScreenPeek(); });
+      peekModeFullBtn.addEventListener("click", () => {
+        peekMode = "full";
+        peekModeFullBtn.classList.add("active-toggle");
+        peekModeCursorBtn.classList.remove("active-toggle");
+        captureScreenPeek();
+      });
+      peekModeCursorBtn.addEventListener("click", () => {
+        peekMode = "cursor";
+        peekModeCursorBtn.classList.add("active-toggle");
+        peekModeFullBtn.classList.remove("active-toggle");
+        captureScreenPeek();
+      });
+      peekAutoBtn.addEventListener("click", () => {
+        if (peekAutoTimer) {
+          clearInterval(peekAutoTimer);
+          peekAutoTimer = null;
+          peekAutoBtn.classList.remove("active-toggle");
+        } else {
+          peekAutoBtn.classList.add("active-toggle");
+          captureScreenPeek();
+          peekAutoTimer = setInterval(() => {
+            if (peekOpen && document.visibilityState === "visible") captureScreenPeek();
+          }, 1000);
+        }
+      });
+
+      // Launch & Shortcuts Deck
+      const appModeCheck = document.getElementById("appModeCheck");
+      const launchInput = document.getElementById("launchInput");
+      const deckGrid = document.getElementById("deckGrid");
+      const editDeckBtn = document.getElementById("editDeckBtn");
+      const resetDeckBtn = document.getElementById("resetDeckBtn");
+      let deckEditing = false;
+
+      appModeCheck.checked = settings.appMode;
+      appModeCheck.addEventListener("change", () => {
+        settings.appMode = appModeCheck.checked;
+        saveSettings();
+      });
+
+      async function launchPayload(payload, toastLabel) {
+        try {
+          const resp = await apiFetch("/api/launch", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ ...payload, app_mode: appModeCheck.checked }),
+          });
+          if (resp.ok) {
+            showToast(toastLabel || "Opened on PC");
+          } else {
+            const err = await resp.json().catch(() => ({}));
+            showToast(err.error || "Launch failed");
+          }
+        } catch {
+          showToast("Connection error");
+        }
+      }
+
+      document.getElementById("quickYtBtn").addEventListener("click", () => {
+        haptic(10);
+        launchPayload({ kind: "url", target: "https://www.youtube.com" }, "Opening YouTube");
+      });
+      document.getElementById("searchYtBtn").addEventListener("click", () => {
+        const q = launchInput.value.trim();
+        haptic(10);
+        if (!q) launchPayload({ kind: "url", target: "https://www.youtube.com" }, "Opening YouTube");
+        else launchPayload({ kind: "search", engine: "youtube", target: q }, `YouTube: ${q}`);
+      });
+      document.getElementById("openUrlBtn").addEventListener("click", () => {
+        const u = launchInput.value.trim();
+        if (!u) return showToast("Enter a URL or search query");
+        haptic(10);
+        if (/^https?:\/\//i.test(u) || /^[\w.-]+\.[a-z]{2,}(\/|$)/i.test(u)) {
+          launchPayload({ kind: "url", target: u }, `Opening ${u}`);
+        } else {
+          launchPayload({ kind: "search", engine: "google", target: u }, `Searching: ${u}`);
+        }
+      });
+      launchInput.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          document.getElementById("openUrlBtn").click();
+        }
+      });
+
+      function renderShortcuts(items) {
+        deckGrid.innerHTML = "";
+        for (const item of items) {
+          const wrap = document.createElement("div");
+          wrap.className = "tile-wrap";
+
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = "btn tile-btn";
+
+          const ico = document.createElement("span");
+          ico.className = "tile-icon";
+          ico.style.background = item.color || "#38bdf8";
+          ico.textContent = item.icon || "★";
+
+          const label = document.createElement("span");
+          label.className = "tile-name";
+          label.textContent = item.name;
+
+          btn.appendChild(ico);
+          btn.appendChild(label);
+          btn.addEventListener("click", () => {
+            if (deckEditing) return;
+            haptic(10);
+            launchPayload({ kind: item.kind, target: item.target }, `Opening ${item.name}`);
+          });
+
+          const del = document.createElement("button");
+          del.type = "button";
+          del.className = "tile-del";
+          del.textContent = "✕";
+          del.addEventListener("click", async (e) => {
+            e.stopPropagation();
+            haptic(10);
+            const r = await apiFetch(`/api/shortcuts/${encodeURIComponent(item.id)}`, { method: "DELETE" });
+            if (r.ok) {
+              renderShortcuts(await r.json());
+              showToast(`Removed ${item.name}`);
+            }
+          });
+
+          wrap.appendChild(btn);
+          wrap.appendChild(del);
+          deckGrid.appendChild(wrap);
+        }
+      }
+
+      async function loadShortcuts() {
+        try {
+          const r = await apiFetch("/api/shortcuts");
+          if (r.ok) renderShortcuts(await r.json());
+        } catch {}
+      }
+      loadShortcuts();
+
+      editDeckBtn.addEventListener("click", () => {
+        deckEditing = !deckEditing;
+        deckGrid.classList.toggle("editing", deckEditing);
+        editDeckBtn.textContent = deckEditing ? "Done" : "✎";
+        resetDeckBtn.style.display = deckEditing ? "inline-block" : "none";
+      });
+      resetDeckBtn.addEventListener("click", async () => {
+        const r = await apiFetch("/api/shortcuts/reset", { method: "POST" });
+        if (r.ok) {
+          renderShortcuts(await r.json());
+          showToast("Shortcuts reset");
+        }
+      });
+
+      // Add Shortcut Modal
+      const addShortcutModal = document.getElementById("addShortcutModal");
+      const scNameInput = document.getElementById("scNameInput");
+      const scUrlInput = document.getElementById("scUrlInput");
+      const scColorInput = document.getElementById("scColorInput");
+      let chosenIcon = "★";
+      document.querySelectorAll("#iconChoices .icon-choice").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          chosenIcon = btn.dataset.icon;
+          document.querySelectorAll("#iconChoices .icon-choice").forEach((b) =>
+            b.classList.toggle("active-toggle", b === btn)
+          );
+        });
+      });
+      document.getElementById("addShortcutBtn").addEventListener("click", () => {
+        scNameInput.value = ""; scUrlInput.value = "";
+        addShortcutModal.classList.add("open");
+      });
+      document.getElementById("closeAddShortcutBtn").addEventListener("click", () => addShortcutModal.classList.remove("open"));
+      addShortcutModal.addEventListener("click", (e) => {
+        if (e.target === addShortcutModal) addShortcutModal.classList.remove("open");
+      });
+      document.getElementById("saveShortcutBtn").addEventListener("click", async () => {
+        const name = scNameInput.value.trim(), target = scUrlInput.value.trim();
+        if (!name || !target) return showToast("Name and URL are required");
+        const r = await apiFetch("/api/shortcuts", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name, kind: "url", target, icon: chosenIcon, color: scColorInput.value }),
+        });
+        if (r.ok) {
+          renderShortcuts(await r.json());
+          addShortcutModal.classList.remove("open");
+          showToast(`Added ${name}`);
+        } else {
+          const err = await r.json().catch(() => ({}));
+          showToast(err.error || "Invalid shortcut");
+        }
+      });
+
+      // Audio Volume & Output Switcher (Synced across Pad, Media, and More)
+      const volRange = document.getElementById("volRange");
+      const volPct = document.getElementById("volPct");
+      const muteToggleBtn = document.getElementById("muteToggleBtn");
+      const audioOutputSelect = document.getElementById("audioOutputSelect");
+      const mediaVolRange = document.getElementById("mediaVolRange");
+      const mediaVolPct = document.getElementById("mediaVolPct");
+      const mediaMuteBtn = document.getElementById("mediaMuteBtn");
+      const mediaAudioSelect = document.getElementById("mediaAudioSelect");
+      let lastKnownVol = null;
+      let volDebounce = null;
+
+      function applyVolumeUi(vol, muted) {
+        if (typeof vol === "number") {
+          lastKnownVol = vol;
+          volRange.value = vol;
+          volPct.textContent = `${vol}%`;
+          mediaVolRange.value = vol;
+          mediaVolPct.textContent = `${vol}%`;
+        } else {
+          lastKnownVol = null;
+          volPct.textContent = "--%";
+          mediaVolPct.textContent = "--%";
+        }
+        if (typeof muted === "boolean") {
+          muteToggleBtn.textContent = muted ? "🔇" : "🔊";
+          mediaMuteBtn.textContent = muted ? "🔇 Unmute" : "🔇 Mute";
+          mediaMuteBtn.classList.toggle("danger", muted);
+        }
+      }
+
+      async function pushVolume(val) {
+        const clamped = Math.max(0, Math.min(100, Math.round(val)));
+        applyVolumeUi(clamped);
+        clearTimeout(volDebounce);
+        volDebounce = setTimeout(async () => {
+          await apiFetch("/api/audio/volume", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ volume: clamped }),
+          });
+        }, 65);
+      }
+
+      async function toggleHostMute() {
+        haptic(8);
+        await apiFetch("/api/audio/mute", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({}),
+        });
+        setTimeout(refreshAudio, 120);
+      }
+
+      async function switchAudioOutput(id) {
+        if (!id) return;
+        const r = await apiFetch("/api/audio/output", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id }),
+        });
+        if (r.ok) { showToast("Switched audio output"); refreshAudio(); }
+        else showToast("Could not switch output");
+      }
+
+      async function refreshAudio() {
+        try {
+          const r = await apiFetch("/api/audio");
+          if (!r.ok) return;
+          const data = await r.json();
+          applyVolumeUi(data.volume, !!data.muted);
+
+          [audioOutputSelect, mediaAudioSelect].forEach((sel) => {
+            sel.innerHTML = "";
+            if (Array.isArray(data.outputs) && data.outputs.length > 0) {
+              for (const out of data.outputs) {
+                const opt = document.createElement("option");
+                opt.value = out.id;
+                opt.textContent = out.name;
+                opt.selected = !!out.active;
+                sel.appendChild(opt);
+              }
+            } else {
+              const opt = document.createElement("option");
+              opt.value = "";
+              opt.textContent = "Default system audio output";
+              sel.appendChild(opt);
+            }
+          });
+        } catch {}
+      }
+      refreshAudio();
+
+      document.getElementById("refreshAudioBtn").addEventListener("click", () => { haptic(6); refreshAudio(); });
+      document.getElementById("mediaRefreshAudioBtn").addEventListener("click", () => { haptic(6); refreshAudio(); });
+
+      volRange.addEventListener("input", () => pushVolume(parseInt(volRange.value, 10)));
+      mediaVolRange.addEventListener("input", () => pushVolume(parseInt(mediaVolRange.value, 10)));
+      muteToggleBtn.addEventListener("click", toggleHostMute);
+      mediaMuteBtn.addEventListener("click", toggleHostMute);
+
+      document.getElementById("mediaVolDownBtn").addEventListener("click", () => {
+        haptic(8);
+        if (lastKnownVol !== null) pushVolume(lastKnownVol - 5);
+        else sendMsg({ t: "media", action: "vol_down" });
+      });
+      document.getElementById("mediaVolUpBtn").addEventListener("click", () => {
+        haptic(8);
+        if (lastKnownVol !== null) pushVolume(lastKnownVol + 5);
+        else sendMsg({ t: "media", action: "vol_up" });
+      });
+
+      audioOutputSelect.addEventListener("change", () => switchAudioOutput(audioOutputSelect.value));
+      mediaAudioSelect.addEventListener("change", () => switchAudioOutput(mediaAudioSelect.value));
+
+      // Playback Speed (Fast Forward 2x & Fine Steps)
+      const SPEED_STEPS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
+      let speedIdx = 3; // 1x
+      const speedBadge = document.getElementById("speedBadge");
+      const speedPresetBtns = document.querySelectorAll("[data-speed]");
+
+      function renderSpeedUi() {
+        const cur = SPEED_STEPS[speedIdx];
+        speedBadge.textContent = `${cur}×`;
+        speedPresetBtns.forEach((b) => {
+          const target = parseFloat(b.dataset.speed);
+          b.classList.toggle("active-toggle", Math.abs(target - cur) < 0.01);
+        });
+      }
+
+      function emitSpeedSteps(delta) {
+        const count = Math.abs(delta);
+        const code = delta > 0 ? "Period" : "Comma";
+        for (let i = 0; i < count; i++) {
+          setTimeout(() => sendMsg({ t: "key", code, mods: ["shift"] }), i * 35);
+        }
+      }
+
+      speedPresetBtns.forEach((btn) => {
+        btn.addEventListener("click", () => {
+          haptic(10);
+          let targetVal = parseFloat(btn.dataset.speed);
+          // Tapping 2x while already at 2x toggles back to 1x
+          if (targetVal === 2 && speedIdx === SPEED_STEPS.indexOf(2)) {
+            targetVal = 1;
+          }
+          const targetIdx = SPEED_STEPS.indexOf(targetVal);
+          if (targetIdx === -1) return;
+          const delta = targetIdx - speedIdx;
+          if (delta !== 0) {
+            emitSpeedSteps(delta);
+            speedIdx = targetIdx;
+            renderSpeedUi();
+            showToast(`Playback speed: ${SPEED_STEPS[speedIdx]}×`);
+          }
+        });
+      });
+
+      document.getElementById("speedDownBtn").addEventListener("click", () => {
+        haptic(8);
+        emitSpeedSteps(-1);
+        if (speedIdx > 0) speedIdx -= 1;
+        renderSpeedUi();
+        showToast(`Playback speed: ${SPEED_STEPS[speedIdx]}×`);
+      });
+      document.getElementById("speedUpBtn").addEventListener("click", () => {
+        haptic(8);
+        emitSpeedSteps(1);
+        if (speedIdx < SPEED_STEPS.length - 1) speedIdx += 1;
+        renderSpeedUi();
+        showToast(`Playback speed: ${SPEED_STEPS[speedIdx]}×`);
+      });
+
+      // Now Playing & Sleep Timer
+      const liveStrip = document.getElementById("liveStrip");
+      const nowPlayingRow = document.getElementById("nowPlayingRow");
+      const nowPlayingText = document.getElementById("nowPlayingText");
+      const mediaStatusBadge = document.getElementById("mediaStatusBadge");
+      const mediaNpTitle = document.getElementById("mediaNpTitle");
+      const mediaNpSub = document.getElementById("mediaNpSub");
+      const sleepTimerRow = document.getElementById("sleepTimerRow");
+      const sleepTimerText = document.getElementById("sleepTimerText");
+      const timerCardStatus = document.getElementById("timerCardStatus");
+      const cancelTimerBtn = document.getElementById("cancelTimerBtn");
+      const sleepActionSelect = document.getElementById("sleepActionSelect");
+
+      let timerEndsAtMs = null, timerAction = null, npVisible = false;
+      function updateLiveStripVisibility() {
+        liveStrip.classList.toggle("show", npVisible || timerEndsAtMs !== null);
+      }
+
+      async function refreshNowPlaying() {
+        if (document.visibilityState !== "visible") return;
+        try {
+          const r = await apiFetch("/api/now-playing");
+          if (!r.ok) return;
+          const np = await r.json();
+          if ((np.status === "Playing" || np.status === "Paused") && np.title) {
+            npVisible = true;
+            nowPlayingRow.style.display = "flex";
+            const artist = np.artist ? ` — ${np.artist}` : "";
+            const prefix = np.status === "Paused" ? "⏸" : "♪";
+            nowPlayingText.innerHTML = `${prefix} <strong>${escapeHtml(np.title)}</strong>${escapeHtml(artist)}`;
+
+            mediaStatusBadge.textContent = np.status;
+            mediaNpTitle.textContent = np.title;
+            const playerPart = np.player ? ` • ${np.player}` : "";
+            mediaNpSub.textContent = (np.artist || "Active Media") + playerPart;
+          } else {
+            npVisible = false;
+            nowPlayingRow.style.display = "none";
+            mediaStatusBadge.textContent = "Ready";
+            mediaNpTitle.textContent = "No active media detected";
+            mediaNpSub.textContent = "Controls YouTube, Spotify, VLC & browser players";
+          }
+          updateLiveStripVisibility();
+        } catch {}
+      }
+
+      function renderSleepCountdown() {
+        if (timerEndsAtMs === null) {
+          sleepTimerRow.style.display = "none";
+          cancelTimerBtn.style.display = "none";
+          timerCardStatus.textContent = "Off";
+          updateLiveStripVisibility();
+          return;
+        }
+        const remSecs = Math.max(0, Math.ceil((timerEndsAtMs - Date.now()) / 1000));
+        if (remSecs <= 0) {
+          timerEndsAtMs = null;
+          renderSleepCountdown();
+          return;
+        }
+        const mins = Math.floor(remSecs / 60);
+        const secs = String(remSecs % 60).padStart(2, "0");
+        const label = timerAction || "sleep";
+        sleepTimerRow.style.display = "flex";
+        sleepTimerText.innerHTML = `⏱ <strong>${escapeHtml(label)}</strong> in ${mins}:${secs}`;
+        cancelTimerBtn.style.display = "inline-flex";
+        timerCardStatus.textContent = `${label} in ${mins}:${secs}`;
+        updateLiveStripVisibility();
+      }
+
+      async function refreshSleepTimer() {
+        try {
+          const r = await apiFetch("/api/sleep-timer");
+          if (!r.ok) return;
+          const data = await r.json();
+          if (data.active && typeof data.remaining_secs === "number") {
+            timerEndsAtMs = Date.now() + data.remaining_secs * 1000;
+            timerAction = data.action || "sleep";
+          } else {
+            timerEndsAtMs = null;
+            timerAction = null;
+          }
+          renderSleepCountdown();
+        } catch {}
+      }
+
+      document.querySelectorAll("[data-timer]").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          haptic(10);
+          const minutes = parseInt(btn.dataset.timer, 10);
+          const action = sleepActionSelect.value;
+          const r = await apiFetch("/api/sleep-timer", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ minutes, action }),
+          });
+          if (r.ok) {
+            const data = await r.json();
+            timerEndsAtMs = Date.now() + (data.remaining_secs || minutes * 60) * 1000;
+            timerAction = data.action || action;
+            renderSleepCountdown();
+            showToast(`Sleep timer set for ${minutes}m`);
+          }
+        });
+      });
+
+      async function cancelSleepTimer() {
+        haptic(8);
+        await apiFetch("/api/sleep-timer", { method: "DELETE" });
+        timerEndsAtMs = null;
+        timerAction = null;
+        renderSleepCountdown();
+        showToast("Sleep timer cancelled");
+      }
+      cancelTimerBtn.addEventListener("click", cancelSleepTimer);
+      document.getElementById("stripCancelTimerBtn").addEventListener("click", cancelSleepTimer);
+      setInterval(() => { if (timerEndsAtMs !== null) renderSleepCountdown(); }, 1000);
+      setInterval(refreshNowPlaying, 4500);
+      refreshNowPlaying();
+      refreshSleepTimer();
+
+      // Power Confirmation Modal
+      const confirmPowerModal = document.getElementById("confirmPowerModal");
+      const confirmPowerTitle = document.getElementById("confirmPowerTitle");
+      const confirmPowerDesc = document.getElementById("confirmPowerDesc");
+      let pendingPowerAction = null;
+
+      document.querySelectorAll("[data-power]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          haptic(10);
+          pendingPowerAction = btn.dataset.power;
+          const label = btn.dataset.powerLabel || pendingPowerAction;
+          confirmPowerTitle.textContent = label;
+          confirmPowerDesc.textContent = `Execute "${label}" on the connected media PC now?`;
+          confirmPowerModal.classList.add("open");
+        });
+      });
+      function closePowerModal() {
+        confirmPowerModal.classList.remove("open");
+        pendingPowerAction = null;
+      }
+      document.getElementById("closePowerModalBtn").addEventListener("click", closePowerModal);
+      document.getElementById("cancelPowerBtn").addEventListener("click", closePowerModal);
+      confirmPowerModal.addEventListener("click", (e) => { if (e.target === confirmPowerModal) closePowerModal(); });
+
+      document.getElementById("confirmPowerExecBtn").addEventListener("click", async () => {
+        if (!pendingPowerAction) return;
+        const act = pendingPowerAction;
+        closePowerModal();
+        moreModal.classList.remove("open");
+        const r = await apiFetch("/api/power", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: act }),
+        });
+        if (r.ok) showToast(`Executed: ${act}`);
+        else {
+          const err = await r.json().catch(() => ({}));
+          showToast(err.error || "Power command failed");
+        }
+      });
+
+      // More Modal + Tailnet Devices
+      const moreModal = document.getElementById("moreModal");
+      const peerListEl = document.getElementById("peerList");
+      const sensRange = document.getElementById("sensRange");
+      const sensLabel = document.getElementById("sensLabel");
+      const scrollRange = document.getElementById("scrollRange");
+      const scrollLabel = document.getElementById("scrollLabel");
+      const naturalScrollCheck = document.getElementById("naturalScrollCheck");
+      const tapClickCheck = document.getElementById("tapClickCheck");
+
+      async function loadPeers() {
+        peerListEl.innerHTML = `<div style="color:var(--muted);font-size:0.8rem;">Scanning Tailnet...</div>`;
+        try {
+          const r = await apiFetch("/api/peers");
+          if (!r.ok) {
+            peerListEl.innerHTML = `<div style="color:var(--muted);font-size:0.8rem;">Could not list peers.</div>`;
+            return;
+          }
+          const peers = await r.json();
+          if (!Array.isArray(peers) || peers.length === 0) {
+            peerListEl.innerHTML = `<div style="color:var(--muted);font-size:0.8rem;">No Tailnet peers found.</div>`;
+            return;
+          }
+          peerListEl.innerHTML = "";
+          for (const p of peers) {
+            const row = document.createElement("div");
+            row.className = "peer-item";
+            const meta = document.createElement("div");
+            const name = document.createElement("div");
+            name.className = "peer-name";
+            name.textContent = p.is_self ? `${p.hostname} (This PC)` : p.hostname;
+            const sub = document.createElement("div");
+            sub.className = "peer-sub";
+            sub.textContent = `${p.ip} • ${p.os}`;
+            meta.appendChild(name);
+            meta.appendChild(sub);
+            row.appendChild(meta);
+
+            if (p.is_self) {
+              const tag = document.createElement("span");
+              tag.className = "peer-tag";
+              tag.textContent = "Active";
+              row.appendChild(tag);
+            } else if (p.remote_ready) {
+              const link = document.createElement("a");
+              link.className = "peer-tag";
+              link.href = p.url;
+              link.rel = "noopener noreferrer";
+              link.textContent = "Switch →";
+              row.appendChild(link);
+            } else {
+              const tag = document.createElement("span");
+              tag.className = "peer-tag offline";
+              tag.textContent = p.online ? "Online" : "Offline";
+              row.appendChild(tag);
+            }
+            peerListEl.appendChild(row);
+          }
+        } catch {
+          peerListEl.innerHTML = `<div style="color:var(--muted);font-size:0.8rem;">Error probing Tailnet peers.</div>`;
+        }
+      }
+
+      function syncSettingsUi() {
+        sensRange.value = settings.sens;
+        sensLabel.textContent = `${Number(settings.sens).toFixed(1)}x`;
+        scrollRange.value = settings.scrollSpeed;
+        scrollLabel.textContent = `${Number(settings.scrollSpeed).toFixed(1)}x`;
+        naturalScrollCheck.checked = settings.naturalScroll;
+        tapClickCheck.checked = settings.tapToClick;
+        wakeSettingCheck.checked = settings.wakeLock;
+      }
+
+      document.getElementById("moreBtn").addEventListener("click", () => {
+        haptic(6);
+        syncSettingsUi();
+        refreshAudio();
+        refreshSleepTimer();
+        moreModal.classList.add("open");
+      });
+      document.getElementById("closeMoreBtn").addEventListener("click", () => moreModal.classList.remove("open"));
+      moreModal.addEventListener("click", (e) => { if (e.target === moreModal) moreModal.classList.remove("open"); });
+      document.getElementById("refreshPeersBtn").addEventListener("click", loadPeers);
+
+      sensRange.addEventListener("input", () => {
+        settings.sens = parseFloat(sensRange.value);
+        sensLabel.textContent = `${settings.sens.toFixed(1)}x`;
+        saveSettings();
+      });
+      scrollRange.addEventListener("input", () => {
+        settings.scrollSpeed = parseFloat(scrollRange.value);
+        scrollLabel.textContent = `${settings.scrollSpeed.toFixed(1)}x`;
+        saveSettings();
+      });
+      naturalScrollCheck.addEventListener("change", () => { settings.naturalScroll = naturalScrollCheck.checked; saveSettings(); });
+      tapClickCheck.addEventListener("change", () => { settings.tapToClick = tapClickCheck.checked; saveSettings(); });
+      wakeSettingCheck.addEventListener("change", () => {
+        settings.wakeLock = wakeSettingCheck.checked;
+        saveSettings();
+        syncWakeLock();
+      });
+
+      // Live Soft Keyboard & Voice/Paste
+      const liveInput = document.getElementById("liveInput");
+      const SENTINEL = "\u200B";
+      liveInput.value = "";
+      liveInput.addEventListener("focus", () => { if (!liveInput.value) liveInput.value = SENTINEL; });
+      liveInput.addEventListener("blur", () => { if (liveInput.value === SENTINEL) liveInput.value = ""; });
+
+      let handledByBeforeInput = false;
+      liveInput.addEventListener("beforeinput", (e) => {
+        handledByBeforeInput = false;
+        if (e.inputType === "deleteContentBackward") {
+          e.preventDefault(); handledByBeforeInput = true;
+          sendKeyAction("Backspace"); liveInput.value = SENTINEL;
+          return;
+        }
+        if (e.inputType === "insertLineBreak" || e.inputType === "insertParagraph") {
+          e.preventDefault(); handledByBeforeInput = true;
+          sendKeyAction("Enter"); liveInput.value = SENTINEL;
+          return;
+        }
+        if ((e.inputType === "insertText" || e.inputType === "insertFromPaste") && e.data) {
+          e.preventDefault(); handledByBeforeInput = true;
+          const mods = activeModifierList();
+          if (mods.length > 0 && e.data.length === 1 && /^[a-zA-Z0-9]$/.test(e.data)) {
+            sendKeyAction(e.data.toLowerCase(), mods);
+            clearOneShotModifiers();
+          } else {
+            sendMsg({ t: "text", text: e.data });
+          }
+          liveInput.value = SENTINEL;
+        }
+      });
+      liveInput.addEventListener("input", () => {
+        if (handledByBeforeInput) { handledByBeforeInput = false; liveInput.value = SENTINEL; return; }
+        const val = liveInput.value;
+        if (!val || val.length < 1) sendKeyAction("Backspace");
+        else {
+          const clean = val.replace(/\u200B/g, "");
+          if (clean.length > 0) sendMsg({ t: "text", text: clean });
+        }
+        liveInput.value = SENTINEL;
+      });
+      liveInput.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") { e.preventDefault(); sendKeyAction("Enter"); }
+        else if (e.key === "Backspace" && liveInput.value === SENTINEL) { e.preventDefault(); sendKeyAction("Backspace"); }
+        else if (e.key === "Escape" || e.key === "Tab" || e.key.startsWith("Arrow")) {
+          e.preventDefault(); sendKeyAction(e.code || e.key);
+        }
+      });
+
+      const draftArea = document.getElementById("draftArea");
+      document.getElementById("sendEnterBtn").addEventListener("click", () => {
+        const text = draftArea.value;
+        haptic(12);
+        if (text) {
+          sendMsg({ t: "text", text, enter: true });
+          draftArea.value = "";
+        } else {
+          sendKeyAction("Enter");
+        }
+      });
+      document.getElementById("sendPasteBtn").addEventListener("click", () => {
+        const text = draftArea.value;
+        if (!text) return;
+        haptic(12);
+        sendMsg({ t: "clipboard", text, paste: true });
+        draftArea.value = "";
+        showToast("Pasted to PC");
+      });
+
+      // Hotkeys Presets & Visual Key Builder
+      const HK_PRESETS = {
+        common: [
+          { name: "Copy", mods: ["ctrl"], code: "KeyC", chord: "Ctrl+C" },
+          { name: "Paste", mods: ["ctrl"], code: "KeyV", chord: "Ctrl+V" },
+          { name: "Cut", mods: ["ctrl"], code: "KeyX", chord: "Ctrl+X" },
+          { name: "Undo", mods: ["ctrl"], code: "KeyZ", chord: "Ctrl+Z" },
+          { name: "Redo", mods: ["ctrl", "shift"], code: "KeyZ", chord: "Ctrl+⇧+Z" },
+          { name: "Select All", mods: ["ctrl"], code: "KeyA", chord: "Ctrl+A" },
+          { name: "Find", mods: ["ctrl"], code: "KeyF", chord: "Ctrl+F" },
+          { name: "Save", mods: ["ctrl"], code: "KeyS", chord: "Ctrl+S" },
+          { name: "Switch App", mods: ["alt"], code: "Tab", chord: "Alt+Tab" },
+          { name: "New Tab", mods: ["ctrl"], code: "KeyT", chord: "Ctrl+T" },
+          { name: "Close Tab", mods: ["ctrl"], code: "KeyW", chord: "Ctrl+W" },
+          { name: "Fullscreen", mods: [], code: "F11", chord: "F11" },
+        ],
+        browser: [
+          { name: "New Tab", mods: ["ctrl"], code: "KeyT", chord: "Ctrl+T" },
+          { name: "Close Tab", mods: ["ctrl"], code: "KeyW", chord: "Ctrl+W" },
+          { name: "Reopen Tab", mods: ["ctrl", "shift"], code: "KeyT", chord: "Ctrl+⇧+T" },
+          { name: "Address Bar", mods: ["ctrl"], code: "KeyL", chord: "Ctrl+L" },
+          { name: "Reload", mods: ["ctrl"], code: "KeyR", chord: "Ctrl+R" },
+          { name: "Hard Reload", mods: ["ctrl", "shift"], code: "KeyR", chord: "Ctrl+⇧+R" },
+          { name: "Prev Tab", mods: ["ctrl", "shift"], code: "Tab", chord: "Ctrl+⇧+Tab" },
+          { name: "Next Tab", mods: ["ctrl"], code: "Tab", chord: "Ctrl+Tab" },
+          { name: "Back", mods: ["alt"], code: "ArrowLeft", chord: "Alt+←" },
+          { name: "Forward", mods: ["alt"], code: "ArrowRight", chord: "Alt+→" },
+          { name: "Zoom Out", mods: ["ctrl"], code: "Minus", chord: "Ctrl+−" },
+          { name: "Zoom In", mods: ["ctrl"], code: "Equal", chord: "Ctrl++" },
+        ],
+        desktop: [
+          { name: "Switch App", mods: ["alt"], code: "Tab", chord: "Alt+Tab" },
+          { name: "Launcher", mods: ["super"], code: "Space", chord: "Super+Space" },
+          { name: "Show Desktop", mods: ["super"], code: "KeyD", chord: "Super+D" },
+          { name: "Terminal", mods: ["super"], code: "Enter", chord: "Super+↵" },
+          { name: "Files", mods: ["super", "shift"], code: "KeyF", chord: "Super+⇧+F" },
+          { name: "Close Win", mods: ["super"], code: "KeyW", chord: "Super+W" },
+          { name: "Fullscreen", mods: ["super"], code: "KeyF", chord: "Super+F" },
+          { name: "Screenshot", mods: [], code: "PrintScreen", chord: "PrtSc" },
+          { name: "Task Mgr", mods: ["ctrl", "shift"], code: "Escape", chord: "Ctrl+⇧+Esc" },
+          { name: "Next Desk", mods: ["super"], code: "Tab", chord: "Super+Tab" },
+        ],
+      };
+
+      let customHotkeys = [];
+      try {
+        const rawHk = JSON.parse(localStorage.getItem("tsr_custom_hotkeys") || "[]");
+        if (Array.isArray(rawHk)) customHotkeys = rawHk;
+      } catch {}
+      function saveCustomHotkeys() {
+        try { localStorage.setItem("tsr_custom_hotkeys", JSON.stringify(customHotkeys)); } catch {}
+      }
+
+      let activeHkCat = "common";
+      const hkPresetGrid = document.getElementById("hkPresetGrid");
+      const hkCatBtns = document.querySelectorAll("[data-hk-cat]");
+
+      function modPrettyName(m) {
+        return { ctrl: "Ctrl", alt: "Alt", shift: "Shift", super: "Super" }[m] || m;
+      }
+
+      function formatChord(mods, label) {
+        if (!mods || mods.length === 0) return label;
+        return mods.map(modPrettyName).join("+") + "+" + label;
+      }
+
+      function renderHkPresets() {
+        hkPresetGrid.innerHTML = "";
+        const items = activeHkCat === "saved" ? customHotkeys : (HK_PRESETS[activeHkCat] || []);
+        if (items.length === 0) {
+          hkPresetGrid.innerHTML = `<div style="grid-column:1/-1;color:var(--muted);font-size:0.78rem;padding:6px 2px;">No saved hotkeys yet. Build any combo below and tap ★ Save.</div>`;
+          return;
+        }
+        items.forEach((item, idx) => {
+          const wrap = document.createElement("div");
+          wrap.className = "hk-preset-wrap";
+
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = "btn hk-preset-btn";
+
+          const nameSpan = document.createElement("span");
+          nameSpan.className = "hk-preset-name";
+          nameSpan.textContent = item.name;
+
+          const chordSpan = document.createElement("span");
+          chordSpan.className = "hk-chord";
+          chordSpan.textContent = item.chord;
+
+          btn.appendChild(nameSpan);
+          btn.appendChild(chordSpan);
+          btn.addEventListener("click", () => {
+            haptic(10);
+            sendMsg({ t: "key", code: item.code, mods: item.mods || [] });
+            showToast(`Sent: ${item.chord}`);
+          });
+          wrap.appendChild(btn);
+
+          if (activeHkCat === "saved") {
+            const del = document.createElement("button");
+            del.type = "button";
+            del.className = "hk-del-btn";
+            del.textContent = "✕";
+            del.addEventListener("click", (e) => {
+              e.stopPropagation();
+              customHotkeys.splice(idx, 1);
+              saveCustomHotkeys();
+              renderHkPresets();
+            });
+            wrap.appendChild(del);
+          }
+          hkPresetGrid.appendChild(wrap);
+        });
+      }
+
+      hkCatBtns.forEach((btn) => {
+        btn.addEventListener("click", () => {
+          haptic(6);
+          activeHkCat = btn.dataset.hkCat;
+          hkCatBtns.forEach((b) => b.classList.toggle("active", b === btn));
+          renderHkPresets();
+        });
+      });
+      renderHkPresets();
+
+      // Visual Hotkey Builder
+      const hkMods = new Set();
+      let hkLocked = false;
+      let lastHotkey = { mods: ["ctrl"], code: "KeyC", label: "C", chord: "Ctrl+C" };
+      const hkPreview = document.getElementById("hkPreview");
+      const hkLockBtn = document.getElementById("hkLockBtn");
+      const hkModBtns = document.querySelectorAll("[data-hk-mod]");
+
+      function renderHkMods() {
+        hkModBtns.forEach((b) => b.classList.toggle("active-toggle", hkMods.has(b.dataset.hkMod)));
+        const list = ["ctrl", "alt", "shift", "super"].filter((m) => hkMods.has(m));
+        if (list.length > 0) {
+          hkPreview.textContent = list.map(modPrettyName).join(" + ") + " + [Tap key]";
+        } else if (lastHotkey) {
+          hkPreview.textContent = `Last: ${lastHotkey.chord}`;
+        } else {
+          hkPreview.textContent = "Tap modifiers + any key";
+        }
+      }
+
+      hkModBtns.forEach((btn) => {
+        btn.addEventListener("click", () => {
+          haptic(8);
+          const m = btn.dataset.hkMod;
+          if (hkMods.has(m)) hkMods.delete(m);
+          else hkMods.add(m);
+          renderHkMods();
+        });
+      });
+
+      hkLockBtn.addEventListener("click", () => {
+        haptic(8);
+        hkLocked = !hkLocked;
+        hkLockBtn.classList.toggle("active-toggle", hkLocked);
+      });
+
+      document.getElementById("hkClearBtn").addEventListener("click", () => {
+        haptic(6);
+        hkMods.clear();
+        renderHkMods();
+      });
+
+      function fireBuilderKey(code, label) {
+        haptic(10);
+        const mods = ["ctrl", "alt", "shift", "super"].filter((m) => hkMods.has(m));
+        const chord = formatChord(mods, label);
+        sendMsg({ t: "key", code, mods });
+        lastHotkey = { mods: [...mods], code, label, chord };
+        showToast(`Sent: ${chord}`);
+        if (!hkLocked) hkMods.clear();
+        renderHkMods();
+      }
+
+      // Build A-Z QWERTY Bank
+      const alphaBank = document.getElementById("hkBank-alpha");
+      [
+        { cls: "", keys: ["Q","W","E","R","T","Y","U","I","O","P"] },
+        { cls: "r2", keys: ["A","S","D","F","G","H","J","K","L"] },
+        { cls: "r3", keys: ["Z","X","C","V","B","N","M"] },
+      ].forEach((row) => {
+        const div = document.createElement("div");
+        div.className = `qwerty-row ${row.cls}`.trim();
+        row.keys.forEach((ch) => {
+          const b = document.createElement("button");
+          b.type = "button";
+          b.className = "qwerty-key";
+          b.textContent = ch;
+          b.addEventListener("click", () => fireBuilderKey(`Key${ch}`, ch));
+          div.appendChild(b);
+        });
+        alphaBank.appendChild(div);
+      });
+
+      // Build 0-9 & F1-F12 Bank
+      const numfnBank = document.getElementById("hkBank-numfn");
+      const digitRow = document.createElement("div");
+      digitRow.className = "qwerty-row";
+      ["1","2","3","4","5","6","7","8","9","0"].forEach((d) => {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "qwerty-key";
+        b.textContent = d;
+        b.addEventListener("click", () => fireBuilderKey(`Digit${d}`, d));
+        digitRow.appendChild(b);
+      });
+      numfnBank.appendChild(digitRow);
+
+      const fnGrid = document.createElement("div");
+      fnGrid.className = "hk-special-grid";
+      for (let i = 1; i <= 12; i++) {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "btn";
+        b.textContent = `F${i}`;
+        b.addEventListener("click", () => fireBuilderKey(`F${i}`, `F${i}`));
+        fnGrid.appendChild(b);
+      }
+      numfnBank.appendChild(fnGrid);
+
+      // Build Keys & Symbols Bank
+      const specialBank = document.getElementById("hkBank-special");
+      const specialGrid = document.createElement("div");
+      specialGrid.className = "hk-special-grid";
+      [
+        ["Esc", "Escape"], ["Tab", "Tab"], ["Space", "Space"], ["Enter", "Enter"],
+        ["Bksp", "Backspace"], ["Del", "Delete"], ["Ins", "Insert"], ["PrtSc", "PrintScreen"],
+        ["Home", "Home"], ["End", "End"], ["PgUp", "PageUp"], ["PgDn", "PageDown"],
+        ["←", "ArrowLeft"], ["↑", "ArrowUp"], ["↓", "ArrowDown"], ["→", "ArrowRight"],
+        ["Super", "MetaLeft"], ["Menu", "ContextMenu"], ["-", "Minus"], ["=", "Equal"],
+        ["[", "BracketLeft"], ["]", "BracketRight"], ["\\", "Backslash"], [";", "Semicolon"],
+        ["'", "Quote"], ["`", "Backquote"], [",", "Comma"], [".", "Period"],
+        ["/", "Slash"],
+      ].forEach(([label, code]) => {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "btn";
+        b.textContent = label;
+        b.addEventListener("click", () => fireBuilderKey(code, label));
+        specialGrid.appendChild(b);
+      });
+      specialBank.appendChild(specialGrid);
+
+      // Bank switcher
+      const hkBankBtns = document.querySelectorAll("[data-hk-bank]");
+      const hkBanks = document.querySelectorAll(".hk-bank");
+      hkBankBtns.forEach((btn) => {
+        btn.addEventListener("click", () => {
+          haptic(6);
+          const id = btn.dataset.hkBank;
+          hkBankBtns.forEach((b) => b.classList.toggle("active", b === btn));
+          hkBanks.forEach((p) => p.classList.toggle("active", p.id === `hkBank-${id}`));
+        });
+      });
+
+      // Save Custom Hotkey Modal
+      const saveHotkeyModal = document.getElementById("saveHotkeyModal");
+      const hkSaveNameInput = document.getElementById("hkSaveNameInput");
+      const hkSaveChordLabel = document.getElementById("hkSaveChordLabel");
+
+      document.getElementById("hkSaveBtn").addEventListener("click", () => {
+        if (!lastHotkey) return showToast("Tap a hotkey combo first");
+        hkSaveNameInput.value = lastHotkey.chord;
+        hkSaveChordLabel.textContent = lastHotkey.chord;
+        saveHotkeyModal.classList.add("open");
+      });
+      document.getElementById("closeSaveHotkeyBtn").addEventListener("click", () => saveHotkeyModal.classList.remove("open"));
+      saveHotkeyModal.addEventListener("click", (e) => { if (e.target === saveHotkeyModal) saveHotkeyModal.classList.remove("open"); });
+
+      document.getElementById("confirmSaveHotkeyBtn").addEventListener("click", () => {
+        if (!lastHotkey) return;
+        const name = hkSaveNameInput.value.trim() || lastHotkey.chord;
+        customHotkeys.push({
+          name: name.slice(0, 28),
+          mods: lastHotkey.mods,
+          code: lastHotkey.code,
+          chord: lastHotkey.chord,
+        });
+        saveCustomHotkeys();
+        saveHotkeyModal.classList.remove("open");
+        activeHkCat = "saved";
+        hkCatBtns.forEach((b) => b.classList.toggle("active", b.dataset.hkCat === "saved"));
+        renderHkPresets();
+        showToast(`Saved: ${name}`);
+      });
+    })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tailscale Remote — Scan to Pair</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #070b14;
+      --card: rgba(15, 23, 42, 0.88);
+      --border: rgba(148, 163, 184, 0.16);
+      --text: #f8fafc;
+      --muted: #94a3b8;
+      --accent: #38bdf8;
+      --accent-soft: rgba(56, 189, 248, 0.14);
+      --amber: #f59e0b;
+      --amber-soft: rgba(245, 158, 11, 0.14);
+      --emerald: #10b981;
+      --emerald-soft: rgba(16, 185, 129, 0.16);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(circle at 18% 18%, rgba(56, 189, 248, 0.15), transparent 44%),
+        radial-gradient(circle at 82% 85%, rgba(99, 102, 241, 0.16), transparent 46%),
+        var(--bg);
+    }
+
+    .card {
+      width: 100%;
+      max-width: 520px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 26px;
+      padding: 28px 28px 24px;
+      box-shadow: 0 28px 80px rgba(0, 0, 0, 0.55);
+      backdrop-filter: blur(18px);
+      text-align: center;
+    }
+
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 18px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      text-align: left;
+    }
+
+    .logo {
+      width: 40px;
+      height: 40px;
+      border-radius: 12px;
+      background: linear-gradient(135deg, #38bdf8, #6366f1);
+      display: grid;
+      place-items: center;
+      font-size: 20px;
+      font-weight: 800;
+      color: #070b14;
+      box-shadow: 0 8px 24px rgba(56, 189, 248, 0.35);
+      flex-shrink: 0;
+    }
+
+    .brand h1 {
+      font-size: 1.12rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+
+    .brand p {
+      font-size: 0.8rem;
+      color: var(--muted);
+      margin-top: 2px;
+    }
+
+    .badge {
+      font-size: 0.72rem;
+      font-weight: 600;
+      padding: 6px 10px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: rgba(15, 23, 42, 0.9);
+      color: #cbd5e1;
+      white-space: nowrap;
+    }
+
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 9px;
+      padding: 9px 16px;
+      border-radius: 999px;
+      font-size: 0.88rem;
+      font-weight: 600;
+      margin-bottom: 18px;
+      transition: all 0.2s ease;
+    }
+
+    .status-pill.waiting {
+      background: var(--amber-soft);
+      color: #fcd34d;
+      border: 1px solid rgba(245, 158, 11, 0.32);
+    }
+
+    .status-pill.connected {
+      background: var(--emerald-soft);
+      color: #6ee7b7;
+      border: 1px solid rgba(16, 185, 129, 0.36);
+    }
+
+    .dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: currentColor;
+      box-shadow: 0 0 10px currentColor;
+      animation: pulse 1.6s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.45; transform: scale(0.85); }
+    }
+
+    .qr-frame {
+      display: inline-flex;
+      padding: 16px;
+      border-radius: 22px;
+      background: #ffffff;
+      box-shadow: 0 18px 48px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(255, 255, 255, 0.14);
+      margin-bottom: 18px;
+    }
+
+    .qr-frame svg {
+      display: block;
+      width: 280px;
+      height: 280px;
+    }
+
+    .instruction {
+      font-size: 0.95rem;
+      color: #e2e8f0;
+      line-height: 1.45;
+      margin-bottom: 14px;
+    }
+
+    .instruction strong {
+      color: var(--accent);
+    }
+
+    .url-box {
+      background: rgba(7, 11, 20, 0.82);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 11px 14px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.82rem;
+      color: #93c5fd;
+      word-break: break-all;
+      margin-bottom: 10px;
+    }
+
+    .magic-row {
+      font-size: 0.78rem;
+      color: var(--muted);
+      margin-bottom: 12px;
+    }
+
+    .magic-row code {
+      color: #cbd5e1;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+
+    .meta-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      margin: 14px 0 18px;
+    }
+
+    .meta-item {
+      background: rgba(15, 23, 42, 0.65);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 9px 10px;
+      text-align: left;
+    }
+
+    .meta-label {
+      font-size: 0.68rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+    }
+
+    .meta-value {
+      font-size: 0.83rem;
+      font-weight: 600;
+      color: var(--text);
+      margin-top: 3px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      justify-content: center;
+      margin-bottom: 14px;
+    }
+
+    button {
+      appearance: none;
+      border: 1px solid var(--border);
+      background: rgba(30, 41, 59, 0.85);
+      color: var(--text);
+      padding: 10px 16px;
+      border-radius: 12px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 0.12s ease, background 0.15s ease, border-color 0.15s ease;
+    }
+
+    button:hover {
+      background: rgba(51, 65, 85, 0.9);
+      border-color: rgba(56, 189, 248, 0.45);
+    }
+
+    button:active {
+      transform: scale(0.97);
+    }
+
+    button.primary {
+      background: var(--accent-soft);
+      border-color: rgba(56, 189, 248, 0.45);
+      color: #7dd3fc;
+    }
+
+    .countdown-banner {
+      display: none;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 11px 14px;
+      border-radius: 14px;
+      background: var(--emerald-soft);
+      border: 1px solid rgba(16, 185, 129, 0.38);
+      color: #a7f3d0;
+      font-size: 0.84rem;
+      margin-bottom: 14px;
+      text-align: left;
+    }
+
+    .countdown-banner.show {
+      display: flex;
+    }
+
+    .footer-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding-top: 12px;
+      border-top: 1px solid var(--border);
+      font-size: 0.78rem;
+      color: var(--muted);
+    }
+
+    .toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .toggle input {
+      accent-color: var(--accent);
+      width: 15px;
+      height: 15px;
+    }
+  </style>
+</head>
+<body>
+  <main class="card">
+    <header class="header">
+      <div class="brand">
+        <div class="logo">⌘</div>
+        <div>
+          <h1>Tailscale Remote</h1>
+          <p>Phone Trackpad • Keyboard • Media Remote</p>
+        </div>
+      </div>
+      <span class="badge" id="authBadge">__AUTH_BADGE__</span>
+    </header>
+
+    <div class="status-pill waiting" id="statusPill">
+      <span class="dot"></span>
+      <span id="statusText">Waiting for phone on your Tailnet...</span>
+    </div>
+
+    <div class="countdown-banner" id="countdownBanner">
+      <span id="countdownText">Phone paired! Closing pairing screen in 3s...</span>
+      <button type="button" id="keepOpenBtn">Keep Open</button>
+    </div>
+
+    <div class="qr-frame" id="qrFrame">__QR_SVG__</div>
+
+    <p class="instruction">
+      Open your phone camera (on <strong>Tailscale</strong>) and scan to control this PC.
+    </p>
+
+    <div class="url-box" id="pairingUrl">__PAIRING_URL__</div>
+    <div class="magic-row" id="magicRow">__MAGIC_DNS_HTML__</div>
+
+    <section class="meta-grid">
+      <div class="meta-item">
+        <div class="meta-label">Host</div>
+        <div class="meta-value" id="hostName">__HOSTNAME__</div>
+      </div>
+      <div class="meta-item">
+        <div class="meta-label">Tailscale IP</div>
+        <div class="meta-value" id="tailscaleIp">__TAILSCALE_IP__</div>
+      </div>
+      <div class="meta-item">
+        <div class="meta-label">Platform</div>
+        <div class="meta-value" id="osName">__OS_NAME__</div>
+      </div>
+    </section>
+
+    <div class="actions">
+      <button type="button" class="primary" id="copyBtn">Copy Pairing URL</button>
+      <button type="button" id="rotateBtn">Rotate QR Token</button>
+    </div>
+
+    <footer class="footer-row">
+      <label class="toggle">
+        <input type="checkbox" id="autoCloseCheck" checked />
+        <span>Auto-close when phone connects</span>
+      </label>
+      <span>Tailscale-only • Loopback admin</span>
+    </footer>
+  </main>
+
+  <script>
+    (function () {
+      const statusPill = document.getElementById("statusPill");
+      const statusText = document.getElementById("statusText");
+      const qrFrame = document.getElementById("qrFrame");
+      const pairingUrlEl = document.getElementById("pairingUrl");
+      const magicRow = document.getElementById("magicRow");
+      const authBadge = document.getElementById("authBadge");
+      const copyBtn = document.getElementById("copyBtn");
+      const rotateBtn = document.getElementById("rotateBtn");
+      const autoCloseCheck = document.getElementById("autoCloseCheck");
+      const countdownBanner = document.getElementById("countdownBanner");
+      const countdownText = document.getElementById("countdownText");
+      const keepOpenBtn = document.getElementById("keepOpenBtn");
+
+      let currentUrl = pairingUrlEl.textContent.trim();
+      let countdownTimer = null;
+      let autoCloseCancelled = false;
+      let hadConnection = false;
+
+      function cancelAutoClose() {
+        if (countdownTimer) {
+          clearInterval(countdownTimer);
+          countdownTimer = null;
+        }
+        countdownBanner.classList.remove("show");
+      }
+
+      keepOpenBtn.addEventListener("click", () => {
+        autoCloseCancelled = true;
+        autoCloseCheck.checked = false;
+        cancelAutoClose();
+      });
+
+      copyBtn.addEventListener("click", async () => {
+        try {
+          await navigator.clipboard.writeText(currentUrl);
+          copyBtn.textContent = "Copied!";
+          setTimeout(() => (copyBtn.textContent = "Copy Pairing URL"), 1500);
+        } catch {
+          copyBtn.textContent = "Select URL above";
+          setTimeout(() => (copyBtn.textContent = "Copy Pairing URL"), 1800);
+        }
+      });
+
+      rotateBtn.addEventListener("click", async () => {
+        rotateBtn.disabled = true;
+        rotateBtn.textContent = "Rotating...";
+        try {
+          const resp = await fetch("/api/token/rotate", {
+            method: "POST",
+            headers: { "X-TSR-CSRF": "1" },
+          });
+          if (resp.ok) {
+            const data = await resp.json();
+            if (data.pairing_url) {
+              currentUrl = data.pairing_url;
+              pairingUrlEl.textContent = currentUrl;
+            }
+          }
+        } finally {
+          rotateBtn.disabled = false;
+          rotateBtn.textContent = "Rotate QR Token";
+        }
+      });
+
+      function startAutoCloseCountdown() {
+        if (autoCloseCancelled || !autoCloseCheck.checked || countdownTimer) return;
+        let secs = 3;
+        countdownText.textContent = `Phone paired! Closing pairing screen in ${secs}s...`;
+        countdownBanner.classList.add("show");
+        countdownTimer = setInterval(() => {
+          secs -= 1;
+          if (secs <= 0) {
+            clearInterval(countdownTimer);
+            countdownTimer = null;
+            window.close();
+            countdownText.textContent = "Connected & active! You can minimize or close this tab.";
+          } else {
+            countdownText.textContent = `Phone paired! Closing pairing screen in ${secs}s...`;
+          }
+        }, 1000);
+      }
+
+      function applySnapshot(snap) {
+        if (snap.qr_svg) {
+          const doc = new DOMParser().parseFromString(snap.qr_svg, "image/svg+xml");
+          const root = doc && doc.documentElement;
+          if (root && root.tagName.toLowerCase() === "svg") {
+            qrFrame.replaceChildren(document.importNode(root, true));
+          }
+        }
+        if (snap.pairing_url) {
+          currentUrl = snap.pairing_url;
+          pairingUrlEl.textContent = currentUrl;
+        }
+        if (snap.magic_dns_url) {
+          const code = document.createElement("code");
+          code.textContent = snap.magic_dns_url;
+          magicRow.replaceChildren(document.createTextNode("MagicDNS: "), code);
+        } else {
+          magicRow.textContent = "";
+        }
+        authBadge.textContent = snap.auth_enabled ? "Tailnet + Token" : "Tailnet Only";
+
+        const clients = snap.connected || [];
+        if (clients.length > 0) {
+          const names = clients.map((c) => c.label).join(", ");
+          statusPill.className = "status-pill connected";
+          statusText.textContent = `Connected: ${names}`;
+          if (!hadConnection) {
+            hadConnection = true;
+            startAutoCloseCountdown();
+          }
+        } else {
+          hadConnection = false;
+          cancelAutoClose();
+          statusPill.className = "status-pill waiting";
+          statusText.textContent = "Waiting for phone on your Tailnet...";
+        }
+      }
+
+      function connectHostWs() {
+        const proto = location.protocol === "https:" ? "wss:" : "ws:";
+        const ws = new WebSocket(`${proto}//${location.host}/ws/host`);
+        ws.onmessage = (ev) => {
+          try {
+            const data = JSON.parse(ev.data);
+            if (data.t === "snapshot") {
+              applySnapshot(data);
+            }
+          } catch {}
+        };
+        ws.onclose = () => {
+          setTimeout(connectHostWs, 1500);
+        };
+      }
+
+      connectHostWs();
+    })();
+  </script>
+</body>
+</html>

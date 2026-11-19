@@ -1,0 +1,24 @@
+[package]
+name = "tailscale-remote"
+version = "0.1.0"
+edition = "2021"
+authors = ["ryguy0601"]
+description = "Cross-platform Tailscale phone-to-PC wireless trackpad, keyboard, and media remote with instant QR pairing"
+
+[dependencies]
+axum = { version = "0.8", features = ["ws"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "sync", "time", "signal", "process"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+qrcode = { version = "0.14", default-features = false, features = ["svg"] }
+getrandom = "0.2"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+evdev = "0.12"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.52", features = [
+    "Win32_Foundation",
+    "Win32_UI_Input_KeyboardAndMouse",
+    "Win32_UI_WindowsAndMessaging",
+] }
